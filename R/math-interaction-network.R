@@ -1,13 +1,7 @@
 #' Calculate a network interaction integral
 #'
-#' Calculates the location-specific interaction integral
-#'
-#' \deqn{
-#' A(u) = \int_L [g(d_L(u,s)) - 1] \, d\ell(s),
-#' }
-#'
-#' where `d_L(u, s)` is the shortest-path distance on the linear network
-#' and `g` is a supplied pair-correlation function.
+#' Calculates the location-specific interaction integral along a linear network
+#' \eqn{\mathcal{L}} for a supplied pair-correlation function.
 #'
 #' @param locations An `lpp` object containing the locations `u` at which the
 #'   interaction integral is evaluated.
@@ -19,14 +13,50 @@
 #'   quadrature with `nd` sample locations.
 #' @param nd Approximate number of network integration points when `exact = FALSE`.
 #'
-#' @return A numeric vector containing one interaction integral for each location in `locations`.
+#' @details
+#' For each location \eqn{u} in `locations`, evaluates
+#'
+#' \deqn{
+#' A(u) = \int_{\mathcal{L}} [g(d_{\mathcal{L}}(u, s)) - 1] \, d\ell(s),
+#' }
+#'
+#' where \eqn{d_{\mathcal{L}}(u, s)} is the shortest-path distance on the
+#' linear network \eqn{\mathcal{L}} and \eqn{g} is `pair_correlation`. Constructs
+#' a `spatstat.linnet::linfun` mapping network points \eqn{s} to
+#' \eqn{g(d_{\mathcal{L}}(u, s)) - 1}, then integrates over `network` via exact
+#' segment-wise integration (`spatstat.linnet::integral.linfun()`) or network
+#' quadrature approximation.
+#'
+#' @return A numeric vector containing one interaction integral for each location
+#'   in `locations`.
+#'
+#' @references
+#' Ang, Q. W., Baddeley, A., & Nair, G. (2012). Geometrically corrected second
+#' order analysis of events on a linear network, with applications to ecology and
+#' criminology. *Scandinavian Journal of Statistics*, 39(4), 591--617.
+#' \doi{10.1111/j.1467-9469.2011.00762.x}
+#'
+#' Guan, Y., & Shen, Y. (2010). A weighted estimating equation approach for
+#' inhomogeneous spatial point processes. *Biometrika*, 97(4), 867--880.
+#' \doi{10.1093/biomet/asq047}
+#'
+#' @seealso [est_net_interaction()], [attach_net_interaction()], [calc_interaction()]
+#'
+#' @examples
+#' if (requireNamespace("spatstat.data", quietly = TRUE) &&
+#'   requireNamespace("spatstat.random", quietly = TRUE)) {
+#'   data(simplenet, package = "spatstat.data")
+#'   pts <- spatstat.linnet::runiflpp(10, L = simplenet)
+#'   g_hom <- function(r) rep(1.1, length(r))
+#'   calc_net_interaction(pts[1:2], simplenet, g_hom, exact = FALSE, nd = 50L)
+#' }
 #' @export
-calculate_network_interaction_integral <- function(
-    locations,
-    network,
-    pair_correlation,
-    exact = FALSE,
-    nd = 1000L
+calc_net_interaction <- function(
+  locations,
+  network,
+  pair_correlation,
+  exact = FALSE,
+  nd = 1000L
 ) {
   if (!inherits(locations, "lpp")) {
     stop("`locations` must be an `lpp` object.", call. = FALSE)
@@ -100,12 +130,7 @@ calculate_network_interaction_integral <- function(
 
 #' Estimate the network interaction integral
 #'
-#' Estimates the location-specific interaction integral
-#'
-#' \deqn{
-#' A(u) = \int_L [g(d_L(u,s)) - 1] \, d\ell(s),
-#' }
-#'
+#' Estimates the location-specific interaction integral along a linear network
 #' using the inhomogeneous linear pair-correlation function estimated by
 #' [spatstat.linnet::linearpcfinhom()].
 #'
@@ -114,22 +139,62 @@ calculate_network_interaction_integral <- function(
 #' @param locations An `lpp` object containing the locations at which the
 #'   interaction integral is evaluated. Defaults to `point_pattern`.
 #' @param lambda Optional intensity specification passed to [spatstat.linnet::linearpcfinhom()].
-#' @param correction Network geometry correction used by [spatstat.linnet::linearpcfinhom()]. Must be `"Ang"` or `"none"`.
-#' @param nr Number of distances used to estimate the pair-correlation function between `0` and `rmax`.
-#' @param exact Logical indicating whether the network integral should use exact segment-wise integration.
+#' @param correction Network geometry correction used by
+#'   [spatstat.linnet::linearpcfinhom()]. Must be `"Ang"` or `"none"`.
+#' @param nr Number of distances used to estimate the pair-correlation function
+#'   between `0` and `rmax`.
+#' @param exact Logical indicating whether the network integral should use exact
+#'   segment-wise integration.
 #' @param nd Number of network quadrature points when `exact = FALSE`.
 #'
-#' @return A numeric vector containing one estimated interaction integral for each location in `locations`.
+#' @details
+#' Estimates the network pair-correlation function \eqn{\hat{g}(r)} via
+#' `spatstat.linnet::linearpcf()` (when `lambda = NULL`) or
+#' `spatstat.linnet::linearpcfinhom()` over `[0, rmax]`, sets \eqn{g(r) = 1}
+#' beyond `rmax`, and evaluates
+#'
+#' \deqn{
+#' A(u) = \int_{\mathcal{L}} [g(d_{\mathcal{L}}(u, s)) - 1] \, d\ell(s),
+#' }
+#'
+#' at each point in `locations` via [calc_net_interaction()].
+#'
+#' @return A numeric vector containing one estimated interaction integral for each
+#'   location in `locations`.
+#'
+#' @references
+#' Ang, Q. W., Baddeley, A., & Nair, G. (2012). Geometrically corrected second
+#' order analysis of events on a linear network, with applications to ecology and
+#' criminology. *Scandinavian Journal of Statistics*, 39(4), 591--617.
+#' \doi{10.1111/j.1467-9469.2011.00762.x}
+#'
+#' Baddeley, A., Nair, G., Rakshit, S., McSwiggan, G., & Davies, T. M. (2021).
+#' Analysing point patterns on networks --- A review. *Spatial Statistics*,
+#' 42, 100435. \doi{10.1016/j.spasta.2020.100435}
+#'
+#' @seealso [calc_net_interaction()], [attach_net_interaction()], [est_interaction()]
+#'
+#' @examples
+#' if (requireNamespace("spatstat.data", quietly = TRUE) &&
+#'   requireNamespace("spatstat.random", quietly = TRUE)) {
+#'   data(simplenet, package = "spatstat.data")
+#'   pts <- spatstat.linnet::runiflpp(25, L = simplenet)
+#'   vals <- est_net_interaction(
+#'     pts,
+#'     rmax = 0.25, locations = pts[1:2], exact = FALSE, nd = 50L
+#'   )
+#'   vals
+#' }
 #' @export
-estimate_network_interaction_integral <- function(
-    point_pattern,
-    rmax,
-    locations = point_pattern,
-    lambda = NULL,
-    correction = "Ang",
-    nr = 128L,
-    exact = TRUE,
-    nd = 1000L
+est_net_interaction <- function(
+  point_pattern,
+  rmax,
+  locations = point_pattern,
+  lambda = NULL,
+  correction = "Ang",
+  nr = 128L,
+  exact = TRUE,
+  nd = 1000L
 ) {
   if (!inherits(point_pattern, "lpp")) {
     stop("`point_pattern` must be an `lpp` object.", call. = FALSE)
@@ -164,7 +229,10 @@ estimate_network_interaction_integral <- function(
   network <- spatstat.linnet::as.linnet(point_pattern)
 
   if (!identical(spatstat.linnet::as.linnet(locations), network)) {
-    stop("`point_pattern` and `locations` must be defined on the same linear network.", call. = FALSE)
+    stop(
+      "`point_pattern` and `locations` must be defined on the same linear network.",
+      call. = FALSE
+    )
   }
 
   if (spatstat.geom::npoints(locations) == 0L) {
@@ -210,7 +278,7 @@ estimate_network_interaction_integral <- function(
     value
   }
 
-  calculate_network_interaction_integral(
+  calc_net_interaction(
     locations = locations,
     network = network,
     pair_correlation = pair_correlation,
@@ -230,20 +298,48 @@ estimate_network_interaction_integral <- function(
 #' @param lambda Optional intensity specification passed to [spatstat.linnet::linearpcfinhom()].
 #' @param correction Network geometry correction used by [spatstat.linnet::linearpcfinhom()].
 #' @param nr Number of distances used to estimate the pair-correlation function.
-#' @param exact Logical indicating whether network integration should use exact segment-wise integration.
+#' @param exact Logical indicating whether network integration should use
+#'   exact segment-wise integration.
 #' @param nd Number of network quadrature points when `exact = FALSE`.
 #'
+#' @details
+#' Extracts the quadrature point pattern (`attr(data$metadata$quadrature, "situ")`)
+#' stored by [prepare_gbpp_network()], calls [est_net_interaction()] at all
+#' quadrature points, and assigns the resulting vector to `data$interaction_integral`.
+#'
 #' @return The input `gbpp_data` object with `interaction_integral` attached.
+#'
+#' @references
+#' Ang, Q. W., Baddeley, A., & Nair, G. (2012). Geometrically corrected second
+#' order analysis of events on a linear network, with applications to ecology and
+#' criminology. *Scandinavian Journal of Statistics*, 39(4), 591--617.
+#' \doi{10.1111/j.1467-9469.2011.00762.x}
+#'
+#' Guan, Y., & Shen, Y. (2010). A weighted estimating equation approach for
+#' inhomogeneous spatial point processes. *Biometrika*, 97(4), 867--880.
+#' \doi{10.1093/biomet/asq047}
+#'
+#' @seealso [est_net_interaction()], [prepare_gbpp_network()], [fit_gbpp()]
+#'
+#' @examples
+#' if (requireNamespace("spatstat.data", quietly = TRUE) &&
+#'   requireNamespace("spatstat.random", quietly = TRUE)) {
+#'   data(simplenet, package = "spatstat.data")
+#'   pts <- spatstat.linnet::runiflpp(25, L = simplenet)
+#'   dat <- prepare_gbpp_network(pts, nd = 20L)
+#'   dat <- attach_net_interaction(dat, pts, rmax = 0.25, exact = FALSE, nd = 30L)
+#'   summary(dat$interaction_integral)
+#' }
 #' @export
-attach_network_interaction_integral <- function(
-    data,
-    point_pattern,
-    rmax,
-    lambda = NULL,
-    correction = "Ang",
-    nr = 128L,
-    exact = TRUE,
-    nd = 1000L
+attach_net_interaction <- function(
+  data,
+  point_pattern,
+  rmax,
+  lambda = NULL,
+  correction = "Ang",
+  nr = 128L,
+  exact = TRUE,
+  nd = 1000L
 ) {
   if (!inherits(data, "gbpp_data")) {
     stop("`data` must be a `gbpp_data` object.", call. = FALSE)
@@ -272,14 +368,18 @@ attach_network_interaction_integral <- function(
     spatstat.linnet::as.linnet(point_pattern),
     spatstat.linnet::as.linnet(quadrature_locations)
   )) {
-    stop("`point_pattern` and the network quadrature must be defined on the same linear network.", call. = FALSE)
+    stop(
+      "`point_pattern` and the network quadrature must be defined on the same ",
+      "linear network.",
+      call. = FALSE
+    )
   }
 
   if (spatstat.geom::npoints(quadrature_locations) != nrow(data$X)) {
     stop("Network quadrature locations must match the rows of `data$X`.", call. = FALSE)
   }
 
-  interaction_integral <- estimate_network_interaction_integral(
+  interaction_integral <- est_net_interaction(
     point_pattern = point_pattern,
     locations = quadrature_locations,
     rmax = rmax,
@@ -298,7 +398,7 @@ attach_network_interaction_integral <- function(
     stop("Estimated interaction integral contains non-finite values.", call. = FALSE)
   }
 
-  data$interaction_integral <- pmax(0, interaction_integral)
+  data$interaction_integral <- interaction_integral
   validate_gbpp_data(data)
   data
 }

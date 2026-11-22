@@ -1,28 +1,55 @@
 #' Calculate the planar spatial interaction integral
 #'
-#' Calculates the planar approximation to the spatial interaction
-#' integral used by the iteratively weighted GBPP objectives:
-#'
-#' \deqn{
-#' A = K(r_{\max}) - \pi r_{\max}^2.
-#' }
-#'
-#' Here, \eqn{K(r_{\max})} is the estimated Ripley's K-function
-#' at distance \eqn{r_{\max}}.
+#' Calculates the planar approximation \eqn{A = K(r_{\max}) - \pi r_{\max}^2}
+#' to the spatial interaction integral used by the iteratively weighted GBPP
+#' objectives.
 #'
 #' @param K_value Numeric scalar containing the estimated K-function value at `rmax`.
 #' @param rmax Numeric scalar giving the maximum distance used for the K-function approximation.
 #'
-#' @return A numeric scalar containing the estimated interaction integral.
+#' @details
+#' Evaluates
+#'
+#' \deqn{
+#' A = K(r_{\max}) - \pi r_{\max}^2,
+#' }
+#'
+#' where \eqn{K(r_{\max})} is the estimated Ripley's K-function at distance
+#' \eqn{r_{\max}}. For a second-order intensity-reweighted stationary planar
+#' point process, the spatial interaction integral over a disk of radius
+#' \eqn{r_{\max}} satisfies
+#' \eqn{\int_{b(0, r_{\max})} (g(\|s\|) - 1)\,ds = K(r_{\max}) - \pi r_{\max}^2},
+#' where \eqn{\pi r_{\max}^2} is the theoretical Poisson baseline value under
+#' complete spatial randomness. Positive values indicate spatial clustering,
+#' negative values indicate inhibition, and values near zero indicate weak or
+#' no second-order interaction.
+#'
+#' @return A finite numeric scalar containing the estimated interaction integral.
+#'
+#' @references
+#' Guan, Y., & Shen, Y. (2010). A weighted estimating equation approach for
+#' inhomogeneous spatial point processes. *Biometrika*, 97(4), 867--880.
+#' \doi{10.1093/biomet/asq047}
+#'
+#' Lu, C., Guan, Y., van Lieshout, M.-C., & Xu, G. (2025). XGBoostPP: Tree-based
+#' estimation of point process intensity functions. *Journal of Computational and
+#' Graphical Statistics*, 35(1), 229--240. \doi{10.1080/10618600.2025.2520582}
+#'
+#' Baddeley, A., Rubak, E., & Turner, R. (2015). *Spatial Point Patterns:
+#' Methodology and Applications with R*. Chapman and Hall/CRC.
+#'
+#' @seealso [est_interaction()], [attach_interaction()], [calc_net_interaction()]
+#'
+#' @examples
+#' calc_interaction(K_value = 0.05, rmax = 0.1)
 #' @export
-calculate_interaction_integral <- function(
-    K_value,
-    rmax
+calc_interaction <- function(
+  K_value,
+  rmax
 ) {
-
   if (length(K_value) != 1L ||
-      !is.numeric(K_value) ||
-      !is.finite(K_value)) {
+    !is.numeric(K_value) ||
+    !is.finite(K_value)) {
     stop(
       "`K_value` must be a single finite numeric value.",
       call. = FALSE
@@ -30,9 +57,9 @@ calculate_interaction_integral <- function(
   }
 
   if (length(rmax) != 1L ||
-      !is.numeric(rmax) ||
-      !is.finite(rmax) ||
-      rmax <= 0) {
+    !is.numeric(rmax) ||
+    !is.finite(rmax) ||
+    rmax <= 0) {
     stop(
       "`rmax` must be a single positive finite numeric value.",
       call. = FALSE
@@ -53,13 +80,9 @@ calculate_interaction_integral <- function(
 
 #' Estimate the planar interaction integral from an inhomogeneous K-function
 #'
-#' Estimates the spatial interaction integral used by the iteratively
-#' weighted GBPP objectives. The inhomogeneous K-function is evaluated
-#' at `rmax` and transformed using
-#'
-#' \deqn{
-#' A = K(r_{\max}) - \pi r_{\max}^2.
-#' }
+#' Estimates the spatial interaction integral used by the iteratively weighted
+#' GBPP objectives by evaluating the inhomogeneous K-function at `rmax` and
+#' subtracting the Poisson baseline \eqn{\pi r_{\max}^2}.
 #'
 #' @param point_pattern A planar `spatstat` point pattern (`ppp`).
 #' @param rmax Maximum distance at which the inhomogeneous K-function is evaluated.
@@ -67,21 +90,51 @@ calculate_interaction_integral <- function(
 #'   at the observed points. If omitted, `Kinhom()` estimates the
 #'   intensity using its default leave-one-out kernel procedure.
 #' @param correction Edge correction used by `Kinhom()`. One of
-#'   `"isotropic"`, `"translate"`, or `"border"`.
+#'   `"translate"` (default), `"isotropic"` (falls back to `"translate"` for
+#'   pixel-mask windows), or `"border"`.
 #'
-#' @return A numeric scalar containing the estimated interaction integral.
+#' @details
+#' Calls [spatstat.explore::Kinhom()] at distance `rmax` using the requested edge
+#' correction (`"translate"`, `"isotropic"`, or `"border"`) and transforms the
+#' resulting estimate via [calc_interaction()],
+#'
+#' \deqn{
+#' A = K(r_{\max}) - \pi r_{\max}^2.
+#' }
+#'
+#' @return A finite numeric scalar containing the estimated interaction integral.
+#'
+#' @references
+#' Guan, Y., & Shen, Y. (2010). A weighted estimating equation approach for
+#' inhomogeneous spatial point processes. *Biometrika*, 97(4), 867--880.
+#' \doi{10.1093/biomet/asq047}
+#'
+#' Lu, C., Guan, Y., van Lieshout, M.-C., & Xu, G. (2025). XGBoostPP: Tree-based
+#' estimation of point process intensity functions. *Journal of Computational and
+#' Graphical Statistics*, 35(1), 229--240. \doi{10.1080/10618600.2025.2520582}
+#'
+#' Baddeley, A., Rubak, E., & Turner, R. (2015). *Spatial Point Patterns:
+#' Methodology and Applications with R*. Chapman and Hall/CRC.
+#'
+#' @seealso [calc_interaction()], [attach_interaction()], [est_net_interaction()]
+#'
+#' @examples
+#' if (requireNamespace("spatstat.random", quietly = TRUE)) {
+#'   win <- spatstat.geom::square(1)
+#'   pts <- spatstat.random::runifpoint(30, win = win)
+#'   est_interaction(pts, rmax = 0.15)
+#' }
 #' @export
-estimate_interaction_integral <- function(
-    point_pattern,
-    rmax,
-    lambda = NULL,
-    correction = c(
-      "translate",
-      "isotropic",
-      "border"
-    )
+est_interaction <- function(
+  point_pattern,
+  rmax,
+  lambda = NULL,
+  correction = c(
+    "translate",
+    "isotropic",
+    "border"
+  )
 ) {
-
   correction <- match.arg(correction)
 
   if (!inherits(point_pattern, "ppp")) {
@@ -96,9 +149,9 @@ estimate_interaction_integral <- function(
   }
 
   if (length(rmax) != 1L ||
-      !is.numeric(rmax) ||
-      !is.finite(rmax) ||
-      rmax <= 0) {
+    !is.numeric(rmax) ||
+    !is.finite(rmax) ||
+    rmax <= 0) {
     stop(
       "`rmax` must be a single positive finite numeric value.",
       call. = FALSE
@@ -106,7 +159,6 @@ estimate_interaction_integral <- function(
   }
 
   if (!is.null(lambda)) {
-
     if (!is.numeric(lambda)) {
       stop(
         "`lambda` must be numeric.",
@@ -122,7 +174,7 @@ estimate_interaction_integral <- function(
     }
 
     if (any(!is.finite(lambda)) ||
-        any(lambda <= 0)) {
+      any(lambda <= 0)) {
       stop(
         "`lambda` must contain positive finite values.",
         call. = FALSE
@@ -145,15 +197,12 @@ estimate_interaction_integral <- function(
   )
 
   K <- if (is.null(lambda)) {
-
     spatstat.explore::Kinhom(
       point_pattern,
       r = r_values,
       correction = correction
     )
-
   } else {
-
     spatstat.explore::Kinhom(
       point_pattern,
       lambda = lambda,
@@ -164,8 +213,7 @@ estimate_interaction_integral <- function(
 
   K_data <- as.data.frame(K)
 
-  correction_column <- switch(
-    correction,
+  correction_column <- switch(correction,
     isotropic = "iso",
     translate = "trans",
     border = "border"
@@ -191,14 +239,14 @@ estimate_interaction_integral <- function(
   K_value <- K_data[[correction_column]][r_index]
 
   if (length(K_value) != 1L ||
-      !is.finite(K_value)) {
+    !is.finite(K_value)) {
     stop(
       "The K-function estimate at `rmax` is not finite.",
       call. = FALSE
     )
   }
 
-  calculate_interaction_integral(
+  calc_interaction(
     K_value = K_value,
     rmax = rmax
   )
@@ -213,16 +261,40 @@ estimate_interaction_integral <- function(
 #' @param point_pattern A `ppp` object containing the observed event locations.
 #' @param rmax Maximum distance used in the K-function estimate.
 #' @param lambda Optional intensity values supplied to `Kinhom()`.
-#' @param correction Edge correction used by [`spatstat.explore::Kinhom()`].
+#' @param correction Edge correction used by [spatstat.explore::Kinhom()]. One of
+#'   `"translate"` (default), `"isotropic"`, or `"border"`.
+#'
+#' @details
+#' Verifies that the event count `sum(data$y == 1)` matches `npoints(point_pattern)`,
+#' computes the planar interaction integral via [est_interaction()], and stores
+#' the recycled vector in `data$interaction_integral` for `"iterative_poisson"`
+#' and `"iterative_logistic"` objectives.
 #'
 #' @return The modified [`gbpp_data`] object with `interaction_integral` populated.
+#'
+#' @references
+#' Guan, Y., & Shen, Y. (2010). A weighted estimating equation approach for
+#' inhomogeneous spatial point processes. *Biometrika*, 97(4), 867--880.
+#' \doi{10.1093/biomet/asq047}
+#'
+#' @seealso [est_interaction()], [prepare_gbpp()], [attach_net_interaction()],
+#'   [fit_gbpp()]
+#'
+#' @examples
+#' if (requireNamespace("spatstat.random", quietly = TRUE)) {
+#'   win <- spatstat.geom::square(1)
+#'   pts <- spatstat.random::runifpoint(30, win = win)
+#'   dat <- prepare_gbpp(pts, nd = 16L)
+#'   dat <- attach_interaction(dat, pts, rmax = 0.15)
+#'   head(dat$interaction_integral)
+#' }
 #' @export
-attach_interaction_integral <- function(
-    data,
-    point_pattern,
-    rmax,
-    lambda = NULL,
-    correction = c("translate", "isotropic", "border")
+attach_interaction <- function(
+  data,
+  point_pattern,
+  rmax,
+  lambda = NULL,
+  correction = c("translate", "isotropic", "border")
 ) {
   correction <- match.arg(correction)
 
@@ -248,7 +320,7 @@ attach_interaction_integral <- function(
     )
   }
 
-  interaction_integral <- estimate_interaction_integral(
+  interaction_integral <- est_interaction(
     point_pattern = point_pattern,
     rmax = rmax,
     lambda = lambda,

@@ -20,25 +20,61 @@
 #'   and `quadrature_method` is omitted, automatically aligns the quadrature scheme:
 #'   `"logistic"` for logistic objectives and `"berman_turner"` for Poisson objectives.
 #' @param statistical_weight Optional numeric vector of custom statistical weights
-#'   (e.g., from pilot estimation, local LISA statistics, or IPW). Must match the
+#'   (e.g., from pilot intensity estimation or inverse probability weighting). Must match the
 #'   total number of quadrature points.
 #' @param interaction_integral Optional numeric vector or scalar of spatial interaction
 #'   integrals for iteratively weighted objectives.
 #' @param ... Additional arguments passed to [spatstat.geom::quadscheme()] or
 #'   [spatstat.geom::quadscheme.logi()].
 #'
-#' @return A `gbpp_data` object with `type = "planar"`.
+#' @details
+#' For `"berman_turner"` quadrature, [spatstat.geom::quadscheme()] tiles the window
+#' with an `nd x nd` dummy grid and assigns Berman-Turner quadrature weights \eqn{v_i}
+#' whose sum equals the window area \eqn{|W|}. For `"logistic"` quadrature,
+#' [spatstat.geom::quadscheme.logi()] records the dummy-process intensity \eqn{\delta_i}
+#' (`dummy_intensity`) used by the logistic point process estimating equation
+#' (Baddeley et al., 2014). Factor and character covariates are preserved for native
+#' handling by downstream gradient boosting engines.
+#'
+#' @return A `gbpp_data` object with `type = "planar"`, containing covariate matrix/frame
+#'   `X`, binary event/dummy indicator `y`, quadrature `locations`, `quadrature_weight`,
+#'   optional `dummy_intensity`, optional `statistical_weight` and `interaction_integral`,
+#'   observation `window`, and `metadata`.
+#'
+#' @references
+#' Berman, M., & Turner, T. R. (1992). Approximating point process likelihoods
+#' with GLIM. *Journal of the Royal Statistical Society: Series C (Applied Statistics)*,
+#' 41(1), 31--38. \doi{10.2307/2347614}
+#'
+#' Baddeley, A., Coeurjolly, J.-F., Rubak, E., & Waagepetersen, R. (2014).
+#' Logistic regression for spatial Gibbs point processes. *Biometrika*,
+#' 101(2), 377--392. \doi{10.1093/biomet/ast056}
+#'
+#' Baddeley, A., Rubak, E., & Turner, R. (2015). *Spatial Point Patterns:
+#' Methodology and Applications with R*. Chapman and Hall/CRC.
+#'
+#' @seealso [prepare_gbpp_network()], [prepare_quad_data()], [new_gbpp_data()],
+#'   [fit_gbpp()]
+#'
+#' @examples
+#' if (requireNamespace("spatstat.random", quietly = TRUE)) {
+#'   win <- spatstat.geom::square(1)
+#'   pts <- spatstat.random::runifpoint(25, win = win)
+#'   cov_x <- spatstat.geom::as.im(function(x, y) x, W = win)
+#'   dat <- prepare_gbpp(pts, covariates = list(x = cov_x), nd = 16L)
+#'   print(dat)
+#' }
 #' @export
 prepare_gbpp <- function(
-    point_pattern,
-    covariates = list(),
-    nd = 1000L,
-    quadrature_method = c("berman_turner", "logistic"),
-    dummytype = c("grid", "poisson"),
-    objective = NULL,
-    statistical_weight = NULL,
-    interaction_integral = NULL,
-    ...
+  point_pattern,
+  covariates = list(),
+  nd = 1000L,
+  quadrature_method = c("berman_turner", "logistic"),
+  dummytype = c("grid", "poisson"),
+  objective = NULL,
+  statistical_weight = NULL,
+  interaction_integral = NULL,
+  ...
 ) {
   if (!inherits(point_pattern, "ppp")) {
     stop("`point_pattern` must be a `ppp` object.", call. = FALSE)
@@ -54,8 +90,8 @@ prepare_gbpp <- function(
     })
 
     if (is.null(names(covariates)) ||
-        anyNA(names(covariates)) ||
-        any(names(covariates) == "")) {
+      anyNA(names(covariates)) ||
+      any(names(covariates) == "")) {
       stop("All planar covariates must be named.", call. = FALSE)
     }
 
@@ -103,10 +139,10 @@ prepare_gbpp <- function(
   }
 
   if (length(nd) != 1L ||
-      !is.numeric(nd) ||
-      !is.finite(nd) ||
-      nd <= 0 ||
-      nd != as.integer(nd)) {
+    !is.numeric(nd) ||
+    !is.finite(nd) ||
+    nd <= 0 ||
+    nd != as.integer(nd)) {
     stop(
       "`nd` must be one positive integer.",
       call. = FALSE
@@ -116,7 +152,8 @@ prepare_gbpp <- function(
   nd <- as.integer(nd)
 
   if (missing(quadrature_method) && !is.null(objective)) {
-    quadrature_method <- if (objective %in% c("logistic", "weighted_logistic", "iterative_logistic")) {
+    logi_objs <- c("logistic", "weighted_logistic", "iterative_logistic")
+    quadrature_method <- if (objective %in% logi_objs) {
       "logistic"
     } else {
       "berman_turner"
@@ -136,7 +173,7 @@ prepare_gbpp <- function(
     U <- spatstat.geom::union.quad(Q)
     y <- as.integer(spatstat.geom::is.data(Q))
     v <- spatstat.geom::w.quad(Q)
-    delta <- calculate_planar_dummy_intensity(
+    delta <- calc_dummy_intensity(
       y = y,
       quadrature_weight = point_pattern$window
     )
@@ -184,9 +221,15 @@ prepare_gbpp <- function(
     )
   }
 
+  if (!is.null(interaction_integral) &&
+    is.numeric(interaction_integral) &&
+    length(interaction_integral) == 1L) {
+    interaction_integral <- rep(interaction_integral, length(y))
+  }
+
   locations <- as.data.frame(spatstat.geom::coords(U))
 
-  new_gbpp_data(
+  out <- new_gbpp_data(
     X = X,
     y = y,
     locations = locations,
@@ -204,33 +247,65 @@ prepare_gbpp <- function(
       dummytype = if (quadrature_method == "logistic") dummytype else "grid"
     )
   )
+  validate_gbpp_data(out, objective = NULL)
+  out
 }
 
 #' Convert a spatstat quadrature scheme to a GBPP data object
+#'
+#' Converts an existing `spatstat` planar or linear-network quadrature scheme
+#' and corresponding covariate matrix or data frame into a validated
+#' `gbpp_data` object.
 #'
 #' @param Q A quadrature scheme produced by `spatstat`.
 #' @param X Covariate data corresponding to all quadrature points.
 #' @param objective Objective used by the model.
 #' @param type Spatial domain type: `"planar"` or `"network"`.
 #' @param statistical_weight Optional statistical weights.
+#' @param interaction_integral Optional spatial interaction integral vector for
+#'   iterative objectives.
+#'
+#' @details
+#' Extracts the binary indicator (`1` for data points, `0` for dummy points),
+#' coordinates (`locations`), Berman-Turner weights (`quadrature_weight`), and, for
+#' logistic objectives, dummy-process intensity (`dummy_intensity`) from a
+#' pre-constructed `spatstat.geom::quad` or `spatstat.linnet` quadrature scheme `Q`.
 #'
 #' @return An object of class `gbpp_data`.
+#'
+#' @references
+#' Baddeley, A., Rubak, E., & Turner, R. (2015). *Spatial Point Patterns:
+#' Methodology and Applications with R*. Chapman and Hall/CRC.
+#'
+#' @seealso [prepare_gbpp()], [prepare_gbpp_network()], [new_gbpp_data()],
+#'   [validate_gbpp_data()]
+#'
+#' @examples
+#' if (requireNamespace("spatstat.random", quietly = TRUE)) {
+#'   win <- spatstat.geom::square(1)
+#'   pts <- spatstat.random::runifpoint(20, win = win)
+#'   Q <- spatstat.geom::quadscheme(pts, nd = 8)
+#'   U <- spatstat.geom::union.quad(Q)
+#'   X <- data.frame(x = U$x, y = U$y)
+#'   dat <- prepare_quad_data(Q, X = X, objective = "poisson", type = "planar")
+#'   print(dat)
+#' }
 #' @export
-prepare_pp_data <- function(
-    Q,
-    X,
-    objective = c(
-      "poisson",
-      "weighted_poisson",
-      "logistic",
-      "weighted_logistic",
-      "iterative_poisson",
-      "iterative_logistic"
-    ),
-    type = c("planar", "network"),
-    statistical_weight = NULL
+prepare_quad_data <- function(
+  Q,
+  X,
+  objective = c(
+    "poisson",
+    "weighted_poisson",
+    "logistic",
+    "weighted_logistic",
+    "iterative_poisson",
+    "iterative_logistic"
+  ),
+  type = c("planar", "network"),
+  statistical_weight = NULL,
+  interaction_integral = NULL
 ) {
-
   objective <- match.arg(objective)
   type <- match.arg(type)
 
@@ -239,7 +314,12 @@ prepare_pp_data <- function(
   }
 
   y <- as.integer(spatstat.geom::is.data(Q))
-  locations <- as.data.frame(spatstat.geom::coords(Q))
+  situ <- attr(Q, "situ")
+  locations <- if (type == "network" && !is.null(situ) && inherits(situ, "lpp")) {
+    situ
+  } else {
+    as.data.frame(spatstat.geom::coords(Q))
+  }
   quadrature_weight <- spatstat.geom::w.quad(Q)
 
   if (nrow(X) != length(y)) {
@@ -257,7 +337,7 @@ prepare_pp_data <- function(
   }
 
   if (objective %in% c("weighted_poisson", "weighted_logistic") &&
-      is.null(statistical_weight)) {
+    is.null(statistical_weight)) {
     stop(
       "`statistical_weight` is required for weighted objectives.",
       call. = FALSE
@@ -265,7 +345,7 @@ prepare_pp_data <- function(
   }
 
   if (!is.null(statistical_weight) &&
-      length(statistical_weight) != length(y)) {
+    length(statistical_weight) != length(y)) {
     stop(
       "`statistical_weight` must have one value for each point.",
       call. = FALSE
@@ -278,17 +358,40 @@ prepare_pp_data <- function(
     dummy_intensity <- extract_dummy_intensity(Q)
   }
 
-  new_gbpp_data(
+  win_obj <- if (type == "network") {
+    if (!is.null(situ) && inherits(situ, "lpp")) {
+      situ$domain
+    } else if (inherits(Q$data, "lpp")) {
+      Q$data$domain
+    } else {
+      NULL
+    }
+  } else {
+    if (!is.null(Q$data$window)) {
+      Q$data$window
+    } else if (inherits(Q$dummy, "ppp")) {
+      Q$dummy$window
+    } else {
+      NULL
+    }
+  }
+
+  out <- new_gbpp_data(
     X = X,
     y = y,
     locations = locations,
     quadrature_weight = quadrature_weight,
     dummy_intensity = dummy_intensity,
     statistical_weight = statistical_weight,
+    interaction_integral = interaction_integral,
+    window = win_obj,
     type = type,
     metadata = list(
       objective = objective,
-      source = "spatstat_quadrature"
+      source = "spatstat_quadrature",
+      quadrature = Q
     )
   )
+  validate_gbpp_data(out, objective = NULL)
+  out
 }
