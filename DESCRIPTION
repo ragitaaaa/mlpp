@@ -1,24 +1,29 @@
-Package: gbpp
-Title: Gradient Boosting for Point Processes
+Package: mlpp
+Title: Machine Learning for Point Processes
 Version: 0.1.0
 Authors@R: c(
     person("Rendi Andria Gita", "Putra", email = "ragita.dev@gmail.com", role = c("aut", "cre")),
     person("Achmad", "Choiruddin", email = "choiruddin@its.ac.id", role = "aut")
   )
-Description: Fits gradient boosted point process models to univariate spatial
-    point patterns on planar domains and linear networks. Implements
-    point-process-specific loss functions including Berman-Turner weighted
-    Poisson pseudo-likelihood and logistic likelihood with negative sampling.
-    Interfaces with gradient boosting backends including 'xgboost' (Chen and
-    Guestrin, 2016 <doi:10.1145/2939672.2939785>), 'lightgbm' (Ke et al.,
-    2017), and 'catboost' (Prokhorenkova et al., 2018
-    <doi:10.48550/arXiv.1706.09516>) via 'reticulate' Python interoperability. Supports stochastic thinning
-    spatial cross-validation, partial dependence plots, Accumulated Local
-    Effects, and SHAP explainability.
+Description: Fits machine learning point process models, currently supporting
+    gradient boosted decision trees, to univariate spatial point patterns on
+    planar domains and linear networks. Implements point-process-specific loss
+    functions including Berman-Turner weighted Poisson pseudo-likelihood and
+    logistic likelihood with negative sampling. Interfaces with gradient
+    boosting backends including 'xgboost' (Chen and Guestrin, 2016
+    <doi:10.1145/2939672.2939785>), 'lightgbm' (Ke et al., 2017), and
+    'catboost' (Prokhorenkova et al., 2018 <doi:10.48550/arXiv.1706.09516>)
+    via 'reticulate' Python interoperability. Supports stochastic thinning
+    spatial cross-validation, partial dependence plots, and TreeSHAP
+    explainability.
+URL: https://github.com/ragitaaaa/mlpp
+BugReports: https://github.com/ragitaaaa/mlpp/issues
 License: MIT + file LICENSE
 Depends: 
     R (>= 4.0.0)
 Imports: 
+    graphics,
+    grDevices,
     reticulate,
     spatstat.explore,
     spatstat.geom,

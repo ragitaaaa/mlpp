@@ -4,11 +4,29 @@
 #' the `GBPP_PYTHON` or `RETICULATE_PYTHON` environment variable or,
 #' when neither is set, auto-discovers a project-local virtual environment (`.venv`).
 #'
+#' @details
+#' Resolution precedence order when Python has not yet been initialized in the
+#' current R session:
+#' 1. Explicit `GBPP_PYTHON` environment variable.
+#' 2. `RETICULATE_PYTHON` environment variable.
+#' 3. Nearest `.venv` directory found in the working directory or up to five
+#'    parent directories.
+#' 4. Existing `"r-gbpp"` virtualenv or conda environment, or `reticulate::py_discover_config()`.
+#'
 #' @return Invisibly returns `TRUE` if the Python environment is available.
-#' @keywords internal
+#'
+#' @references
+#' Ushey, K., Allaire, J. J., & Tang, Y. (2024). *reticulate: Interface to Python*.
+#' R package.
+#'
+#' @seealso [check_gbpp_python()], [install_gbpp_python()], [get_gbpp_python()]
+#'
+#' @examples
+#' \dontrun{
+#' configure_gbpp_python()
+#' }
 #' @export
 configure_gbpp_python <- function() {
-
   # If Python is already initialized in this R session, avoid re-initialization
   if (reticulate::py_available(initialize = FALSE)) {
     return(invisible(TRUE))
@@ -62,9 +80,11 @@ configure_gbpp_python <- function() {
       stop(
         paste0(
           "GBPP Python environment could not be found.\n",
-          "You can automatically set up a dedicated environment with all required packages by running:\n",
-          "  gbpp::install_gbpp_python()\n",
-          "Or configure an existing Python interpreter via `Sys.setenv(GBPP_PYTHON = 'path/to/python')`."
+          "You can automatically set up a dedicated environment with all required ",
+          "packages by running:\n",
+          "  mlpp::install_gbpp_python()\n",
+          "Or configure an existing Python interpreter via ",
+          "`Sys.setenv(GBPP_PYTHON = 'path/to/python')`."
         ),
         call. = FALSE
       )
@@ -91,14 +111,27 @@ configure_gbpp_python <- function() {
 
 #' Locate GBPP's bundled Python backend files
 #'
-#' @return Path to the directory containing GBPP Python backend modules.
-#' @keywords internal
+#' Resolves the filesystem path to the package's `inst/python` directory containing
+#' the custom point process objectives and engine adapters.
+#'
+#' @details
+#' Checks `system.file("python", package = "mlpp")` first and falls back to
+#' searching for `inst/python` from the current working directory up to five
+#' parent levels during local package development.
+#'
+#' @return Character scalar containing the normalized path to the Python backend
+#'   module directory.
+#'
+#' @seealso [configure_gbpp_python()], [check_gbpp_python()]
+#'
+#' @examples
+#' py_dir <- get_gbpp_python()
+#' dir.exists(py_dir)
 #' @export
-gbpp_python_path <- function() {
-
+get_gbpp_python <- function() {
   path <- system.file(
     "python",
-    package = "gbpp"
+    package = "mlpp"
   )
 
   if (nzchar(path) && dir.exists(path)) {
@@ -126,22 +159,44 @@ gbpp_python_path <- function() {
 #' Install Python dependencies for GBPP
 #'
 #' Automatically creates an isolated virtual environment (`"r-gbpp"`) and
-#' installs the required Python dependencies: `numpy`, `scipy`, `xgboost`,
-#' `lightgbm`, and `catboost`.
+#' installs the required Python dependencies: `numpy`, `scipy`, `pandas`,
+#' `xgboost`, `lightgbm`, and `catboost`.
 #'
 #' @param envname Name of the Python virtual environment. Default is `"r-gbpp"`.
-#' @param method Method passed to [reticulate::py_install()], e.g. `"auto"`, `"virtualenv"`, or `"conda"`.
+#' @param method Method passed to [reticulate::py_install()], e.g. `"auto"`,
+#'   `"virtualenv"`, or `"conda"`.
 #' @param ... Additional arguments passed to [reticulate::py_install()].
 #'
+#' @details
+#' Installs the Python packages needed by `fit_gbpp()` and `explain_gbpp()`.
+#' Calling this function downloads packages and modifies/creates a Python
+#' environment; in automated environments or CRAN checks it should not be run
+#' automatically.
+#'
 #' @return Invisibly returns `TRUE` on success.
+#'
+#' @references
+#' Ushey, K., Allaire, J. J., & Tang, Y. (2024). *reticulate: Interface to Python*.
+#' R package.
+#'
+#' @seealso [configure_gbpp_python()], [check_gbpp_python()]
+#'
+#' @examples
+#' \dontrun{
+#' install_gbpp_python(envname = "r-gbpp")
+#' }
 #' @export
 install_gbpp_python <- function(
-    envname = "r-gbpp",
-    method = "auto",
-    ...
+  envname = "r-gbpp",
+  method = "auto",
+  ...
 ) {
-  pkgs <- c("numpy", "scipy", "xgboost", "lightgbm", "catboost")
-  message("Installing GBPP Python dependencies (", paste(pkgs, collapse = ", "), ") into environment '", envname, "'...")
+  pkgs <- c("numpy", "scipy", "pandas", "xgboost", "lightgbm", "catboost")
+  message(
+    "Installing GBPP Python dependencies (",
+    paste(pkgs, collapse = ", "),
+    ") into environment '", envname, "'..."
+  )
   reticulate::py_install(
     packages = pkgs,
     envname = envname,
@@ -154,10 +209,24 @@ install_gbpp_python <- function(
 
 #' Check GBPP Python Environment and Engine Status
 #'
-#' Verifies that Python is properly configured and inspects the availability
-#' and versions of required packages (`lightgbm`, `catboost`, `xgboost`, `numpy`, `scipy`).
+#' Verifies that Python is properly configured and inspects the availability and
+#' versions of required packages (`lightgbm`, `catboost`, `xgboost`, `numpy`,
+#' `scipy`, `pandas`).
 #'
-#' @return Invisibly returns a named logical vector of package availability.
+#' @details
+#' Calls [configure_gbpp_python()] and prints the active Python executable,
+#' version, and module availability table.
+#'
+#' @return Invisibly returns a named logical vector of package availability
+#'   (`TRUE` when importable, `FALSE` otherwise).
+#'
+#' @seealso [configure_gbpp_python()], [install_gbpp_python()], [get_gbpp_python()]
+#'
+#' @examples
+#' if (reticulate::py_available()) {
+#'   status <- check_gbpp_python()
+#'   print(status)
+#' }
 #' @export
 check_gbpp_python <- function() {
   cat("GBPP Python Environment Diagnostic\n")
@@ -167,7 +236,7 @@ check_gbpp_python <- function() {
   cat("Python executable :", py_config$python, "\n")
   cat("Python version    :", as.character(py_config$version), "\n")
 
-  pkgs <- c("numpy", "scipy", "lightgbm", "catboost", "xgboost")
+  pkgs <- c("numpy", "scipy", "pandas", "lightgbm", "catboost", "xgboost")
   status <- logical(length(pkgs))
   names(status) <- pkgs
 
