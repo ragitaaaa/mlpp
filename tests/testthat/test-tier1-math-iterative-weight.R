@@ -3,7 +3,7 @@ test_that("iterative Poisson weight equals one for zero interaction", {
   prediction <- c(-1, 0, 1)
   interaction_integral <- c(0, 0, 0)
 
-  result <- calculate_iterative_poisson_weight(
+  result <- calc_iter_poisson_weight(
     prediction,
     interaction_integral
   )
@@ -20,7 +20,7 @@ test_that("iterative Poisson weight follows theoretical formula", {
   prediction <- c(0, 0, 0)
   interaction_integral <- c(0, 0.5, 1)
 
-  result <- calculate_iterative_poisson_weight(
+  result <- calc_iter_poisson_weight(
     prediction,
     interaction_integral
   )
@@ -44,7 +44,7 @@ test_that("iterative Poisson weight uses current intensity", {
   prediction <- log(c(2, 1, 0.5))
   interaction_integral <- rep(0.5, 3)
 
-  result <- calculate_iterative_poisson_weight(
+  result <- calc_iter_poisson_weight(
     prediction,
     interaction_integral
   )
@@ -67,7 +67,7 @@ test_that("iterative Poisson weight is numerically stable", {
   prediction <- c(-100, 0, 100)
   interaction_integral <- c(1, 1, 1)
 
-  result <- calculate_iterative_poisson_weight(
+  result <- calc_iter_poisson_weight(
     prediction,
     interaction_integral
   )
@@ -81,7 +81,7 @@ test_that("iterative Poisson weight is numerically stable", {
 test_that("iterative Poisson weight rejects non-positive denominator", {
 
   expect_error(
-    calculate_iterative_poisson_weight(
+    calc_iter_poisson_weight(
       prediction = log(2),
       interaction_integral = -1
     ),
@@ -105,7 +105,7 @@ test_that("iterative Logistic weight follows theoretical formula", {
     1
   )
 
-  result <- calculate_iterative_logistic_weight(
+  result <- calc_iter_logistic_weight(
     prediction = prediction,
     dummy_intensity = dummy_intensity,
     interaction_integral = interaction_integral
@@ -143,7 +143,7 @@ test_that("iterative Logistic weight is not necessarily one when interaction is 
     0
   )
 
-  result <- calculate_iterative_logistic_weight(
+  result <- calc_iter_logistic_weight(
     prediction = prediction,
     dummy_intensity = dummy_intensity,
     interaction_integral = interaction_integral
@@ -182,7 +182,7 @@ test_that("iterative Logistic weight remains finite for extreme predictions", {
     0.5
   )
 
-  result <- calculate_iterative_logistic_weight(
+  result <- calc_iter_logistic_weight(
     prediction = prediction,
     dummy_intensity = dummy_intensity,
     interaction_integral = interaction_integral

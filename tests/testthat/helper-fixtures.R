@@ -42,3 +42,50 @@ make_small_planar_fixture <- function(n = 20L) {
     covariates = list(elev = cov1, grad = cov2)
   )
 }
+
+make_network_integration_fixture <- function(n = 8L) {
+  simplenet <- spatstat.data::simplenet
+
+  point_pattern <- spatstat.linnet::runiflpp(
+    n = n,
+    L = simplenet
+  )
+
+  network <- spatstat.linnet::as.linnet(point_pattern)
+
+  covariate_1 <- spatstat.linnet::as.linim(
+    function(x, y) x + y,
+    L = network,
+    delta = 0.1
+  )
+
+  covariate_2 <- spatstat.linnet::as.linim(
+    function(x, y) x^2 + y^2,
+    L = network,
+    delta = 0.1
+  )
+
+  list(
+    point_pattern = point_pattern,
+    covariates = list(
+      x_sum = covariate_1,
+      x2_y2 = covariate_2
+    )
+  )
+}
+
+skip_if_no_python <- function(modules = character()) {
+  testthat::skip_on_cran()
+  tryCatch(mlpp::configure_gbpp_python(), error = function(e) NULL)
+  testthat::skip_if_not(
+    reticulate::py_available(initialize = TRUE),
+    "Python is not available."
+  )
+  for (mod in modules) {
+    testthat::skip_if_not(
+      reticulate::py_module_available(mod),
+      paste0("Python module '", mod, "' is not available.")
+    )
+  }
+  invisible(TRUE)
+}

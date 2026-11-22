@@ -1,8 +1,5 @@
 test_that(".gbpp_shap works across all backends", {
-  skip_on_cran()
-  skip_if_not(reticulate::py_available(initialize = TRUE), "Python not available")
-  
-  configure_gbpp_python()
+  skip_if_no_python(c("xgboost", "lightgbm", "catboost"))
   
   data <- new_gbpp_data(
     X = data.frame(
@@ -23,15 +20,15 @@ test_that(".gbpp_shap works across all backends", {
   
   for (engine in engines) {
     if (engine == "xgboost") {
-      model <- fit_gbpp_xgboost(data, params = list(eta = 0.1, max_depth = 2L), nrounds = 2L)
+      model <- fit_gbpp(data, engine = "xgboost", objective = "poisson", params = list(eta = 0.1, max_depth = 2L), n_trees = 2L)
     } else if (engine == "lightgbm") {
-      model <- fit_gbpp_lightgbm(data, params = list(learning_rate = 0.1, max_depth = 2L, min_data_in_bin = 1L, min_data_in_leaf = 1L), nrounds = 2L)
+      model <- fit_gbpp(data, engine = "lightgbm", objective = "poisson", params = list(learning_rate = 0.1, max_depth = 2L, min_data_in_bin = 1L, min_data_in_leaf = 1L), n_trees = 2L)
     } else if (engine == "catboost") {
-      model <- fit_gbpp_catboost(data, params = list(learning_rate = 0.1, depth = 2L), nrounds = 2L)
+      model <- fit_gbpp(data, engine = "catboost", objective = "poisson", params = list(learning_rate = 0.1, depth = 2L), n_trees = 2L)
     }
 
     # Extract SHAP
-    res <- .gbpp_shap(model, data$X)
+    res <- mlpp:::.gbpp_shap(model, data$X)
     
     # Check structure
     expect_type(res, "list")

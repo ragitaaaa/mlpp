@@ -1,6 +1,5 @@
 test_that("GBPP Python environment can be configured", {
-  skip_on_cran()
-  skip_if_not(reticulate::py_available(initialize = TRUE), "Python is not available.")
+  skip_if_no_python()
 
   expect_no_error(
     configure_gbpp_python()
@@ -17,8 +16,7 @@ test_that("GBPP Python environment can be configured", {
 
 
 test_that("GBPP Python environment provides required modelling packages", {
-  skip_on_cran()
-  skip_if_not(reticulate::py_available(initialize = TRUE), "Python is not available.")
+  skip_if_no_python(c("xgboost", "lightgbm", "catboost"))
 
   configure_gbpp_python()
 
@@ -33,4 +31,10 @@ test_that("GBPP Python environment provides required modelling packages", {
   expect_no_error(
     reticulate::import("catboost")
   )
+
+  out <- utils::capture.output(status <- check_gbpp_python())
+  expect_type(status, "logical")
+  expect_true(all(c("numpy", "scipy", "pandas", "lightgbm", "catboost", "xgboost") %in% names(status)))
+  expect_true(all(status))
+  expect_true(any(grepl("GBPP Python Environment Diagnostic", out)))
 })

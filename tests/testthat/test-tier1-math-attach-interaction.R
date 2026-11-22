@@ -1,5 +1,6 @@
 test_that("interaction integral can be attached to gbpp data", {
   skip_if_not_installed("spatstat.explore")
+  skip_if_not_installed("spatstat.data")
 
   data(lansing, package = "spatstat.data")
 
@@ -30,7 +31,7 @@ test_that("interaction integral can be attached to gbpp data", {
 
   point_pattern <- lansing[seq_len(5)]
 
-  result <- attach_interaction_integral(
+  result <- attach_interaction(
     data = data_object,
     point_pattern = point_pattern,
     rmax = 0.2
@@ -49,10 +50,12 @@ test_that("interaction integral can be attached to gbpp data", {
 
 
 test_that("interaction integral attachment validates its inputs", {
+  skip_if_not_installed("spatstat.explore")
+  skip_if_not_installed("spatstat.data")
   data(lansing, package = "spatstat.data")
 
   expect_error(
-    attach_interaction_integral(
+    attach_interaction(
       data = list(),
       point_pattern = lansing,
       rmax = 0.2
@@ -82,48 +85,12 @@ test_that("interaction integral attachment validates its inputs", {
   )
 
   expect_error(
-    attach_interaction_integral(
+    attach_interaction(
       data = data_object,
       point_pattern = lansing,
       rmax = 0.2
     ),
     "`data` contains 5 event\\(s\\), but `point_pattern` contains"
-  )
-})
-
-
-test_that("interaction integral validates event count", {
-  data(lansing, package = "spatstat.data")
-
-  n <- 20L
-
-  data_object <- new_gbpp_data(
-    X = matrix(
-      rnorm(n * 2),
-      ncol = 2
-    ),
-    y = c(
-      rep(1, 5),
-      rep(0, 15)
-    ),
-    locations = matrix(
-      runif(n * 2),
-      ncol = 2
-    ),
-    quadrature_weight = rep(1 / n, n),
-    dummy_intensity = rep(1, n),
-    statistical_weight = rep(1, n),
-    interaction_integral = NULL
-  )
-
-  point_pattern <- lansing[seq_len(5)]
-
-  expect_no_error(
-    attach_interaction_integral(
-      data = data_object,
-      point_pattern = point_pattern,
-      rmax = 0.2
-    )
   )
 })
 

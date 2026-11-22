@@ -1,4 +1,5 @@
-test_that("prepare_pp_data converts a planar quadrature scheme", {
+test_that("prepare_quad_data converts a planar quadrature scheme", {
+  skip_if_not_installed("spatstat.random")
 
   W <- spatstat.geom::owin(
     xrange = c(0, 1),
@@ -20,7 +21,7 @@ test_that("prepare_pp_data converts a planar quadrature scheme", {
     x2 = 1
   )
 
-  data <- prepare_pp_data(
+  data <- prepare_quad_data(
     Q = Q,
     X = X,
     objective = "poisson",
@@ -57,7 +58,8 @@ test_that("prepare_pp_data converts a planar quadrature scheme", {
 
 
 
-test_that("prepare_pp_data extracts dummy intensity for logistic objective", {
+test_that("prepare_quad_data extracts dummy intensity for logistic objective", {
+  skip_if_not_installed("spatstat.random")
 
   W <- spatstat.geom::owin(
     xrange = c(0, 1),
@@ -79,7 +81,7 @@ test_that("prepare_pp_data extracts dummy intensity for logistic objective", {
     x1 = seq_len(length(spatstat.geom::is.data(Q)))
   )
 
-  data <- prepare_pp_data(
+  data <- prepare_quad_data(
     Q = Q,
     X = X,
     objective = "logistic"
@@ -97,7 +99,8 @@ test_that("prepare_pp_data extracts dummy intensity for logistic objective", {
   )
 })
 
-test_that("prepare_pp_data does not create dummy intensity for Poisson objective", {
+test_that("prepare_quad_data does not create dummy intensity for Poisson objective", {
+  skip_if_not_installed("spatstat.random")
 
   W <- spatstat.geom::owin(
     xrange = c(0, 1),
@@ -118,7 +121,7 @@ test_that("prepare_pp_data does not create dummy intensity for Poisson objective
     x1 = seq_len(length(spatstat.geom::is.data(Q)))
   )
 
-  data <- prepare_pp_data(
+  data <- prepare_quad_data(
     Q = Q,
     X = X,
     objective = "poisson"
@@ -130,6 +133,7 @@ test_that("prepare_pp_data does not create dummy intensity for Poisson objective
 test_that(
   "prepare_gbpp accepts covariate images that cover the point-pattern window",
   {
+    skip_if_not_installed("spatstat.data")
     data(bei, package = "spatstat.data")
 
     covariate <- bei.extra$elev
@@ -178,6 +182,7 @@ test_that(
 )
 
 test_that("prepare_gbpp defaults to Berman-Turner quadrature with exact counting weights", {
+  skip_if_not_installed("spatstat.random")
   W <- spatstat.geom::owin(c(0, 1), c(0, 1))
   pp <- spatstat.random::runifpoint(10, win = W)
   
@@ -197,6 +202,7 @@ test_that("prepare_gbpp defaults to Berman-Turner quadrature with exact counting
 })
 
 test_that("prepare_gbpp supports logistic quadrature scheme with grid and poisson dummy points", {
+  skip_if_not_installed("spatstat.random")
   W <- spatstat.geom::owin(c(0, 1), c(0, 1))
   pp <- spatstat.random::runifpoint(10, win = W)
   
@@ -228,6 +234,7 @@ test_that("prepare_gbpp supports logistic quadrature scheme with grid and poisso
 })
 
 test_that("prepare_gbpp auto-selects quadrature scheme from objective", {
+  skip_if_not_installed("spatstat.random")
   W <- spatstat.geom::owin(c(0, 1), c(0, 1))
   pp <- spatstat.random::runifpoint(10, win = W)
   
@@ -238,14 +245,15 @@ test_that("prepare_gbpp auto-selects quadrature scheme from objective", {
   expect_equal(data_logi$metadata$quadrature_method, "logistic")
 })
 
-test_that("prepare_pp_data supports iterative_poisson and iterative_logistic", {
+test_that("prepare_quad_data supports iterative_poisson and iterative_logistic", {
+  skip_if_not_installed("spatstat.random")
   W <- spatstat.geom::owin(c(0, 1), c(0, 1))
   pp <- spatstat.random::runifpoint(5, win = W)
   
   Q_bt <- spatstat.geom::quadscheme(pp, nd = 10)
   X <- data.frame(x1 = seq_len(length(spatstat.geom::is.data(Q_bt))))
   
-  data_iter_p <- prepare_pp_data(
+  data_iter_p <- prepare_quad_data(
     Q = Q_bt,
     X = X,
     objective = "iterative_poisson"
@@ -255,12 +263,48 @@ test_that("prepare_pp_data supports iterative_poisson and iterative_logistic", {
   
   Q_logi <- spatstat.geom::quadscheme.logi(pp, nd = 10)
   X_logi <- data.frame(x1 = seq_len(length(spatstat.geom::is.data(Q_logi))))
-  data_iter_l <- prepare_pp_data(
+  data_iter_l <- prepare_quad_data(
     Q = Q_logi,
     X = X_logi,
     objective = "iterative_logistic"
   )
   expect_s3_class(data_iter_l, "gbpp_data")
   expect_type(data_iter_l$dummy_intensity, "double")
+})
+
+test_that("prepare_gbpp builds full planar gbpp_data and preserves factor im covariates", {
+  skip_if_not_installed("spatstat.random")
+
+  W <- spatstat.geom::owin(c(0, 1), c(0, 1))
+  pp <- spatstat.random::runifpoint(10, win = W)
+  elev <- spatstat.geom::as.im(function(x, y) x + y, W = W)
+  zone <- spatstat.geom::as.im(
+    function(x, y) factor(ifelse(x < 0.5, "west", "east"), levels = c("west", "east")),
+    W = W
+  )
+
+  dat <- prepare_gbpp(pp, covariates = list(elevation = elev, zone = zone), nd = 10L)
+  expect_s3_class(dat, "gbpp_data")
+  expect_equal(dat$type, "planar")
+  expect_identical(names(dat$X), c("elevation", "zone"))
+  expect_true(is.factor(dat$X$zone) || is.character(dat$X$zone))
+  expect_identical(dat$window, W)
+})
+
+test_that("prepare_gbpp validates point_pattern, covariates, window coverage, and nd", {
+  W <- spatstat.geom::owin(c(0, 1), c(0, 1))
+  W_small <- spatstat.geom::owin(c(0, 0.5), c(0, 0.5))
+  pp <- spatstat.geom::ppp(x = c(0.2, 0.8), y = c(0.2, 0.8), window = W)
+  im_ok <- spatstat.geom::as.im(function(x, y) x, W = W)
+  im_small <- spatstat.geom::as.im(function(x, y) x, W = W_small)
+  im_na <- spatstat.geom::as.im(function(x, y) ifelse(x > 0.5, NA_real_, x), W = W)
+
+  expect_error(prepare_gbpp(list()), "ppp")
+  expect_error(prepare_gbpp(pp, covariates = unname(list(im_ok)), nd = 5L), "named")
+  expect_error(prepare_gbpp(pp, covariates = list(a = im_ok, a = im_ok), nd = 5L), "unique")
+  expect_error(prepare_gbpp(pp, covariates = list(a = 1:5), nd = 5L), "im")
+  expect_error(prepare_gbpp(pp, covariates = list(a = im_small), nd = 5L), "cover")
+  expect_error(prepare_gbpp(pp, covariates = list(a = im_na), nd = 5L), "cover|missing")
+  expect_error(prepare_gbpp(pp, nd = 0L), "positive integer")
 })
 

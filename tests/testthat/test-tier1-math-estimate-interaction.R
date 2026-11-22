@@ -45,12 +45,12 @@ test_that(
       )
     )
 
-    expected <- calculate_interaction_integral(
+    expected <- calc_interaction(
       K_value = K_data$iso[r_index],
       rmax = rmax
     )
 
-    result <- estimate_interaction_integral(
+    result <- est_interaction(
       point_pattern = point_pattern,
       rmax = rmax,
       lambda = lambda,
@@ -100,7 +100,7 @@ test_that(
     )
 
     expect_no_error(
-      estimate_interaction_integral(
+      est_interaction(
         point_pattern = point_pattern,
         rmax = 0.1,
         lambda = lambda,
@@ -109,7 +109,7 @@ test_that(
     )
 
     expect_no_error(
-      estimate_interaction_integral(
+      est_interaction(
         point_pattern = point_pattern,
         rmax = 0.1,
         lambda = lambda,
@@ -146,7 +146,7 @@ test_that(
     )
 
     expect_error(
-      estimate_interaction_integral(
+      est_interaction(
         point_pattern = point_pattern,
         rmax = 0.1,
         lambda = c(1, 2)
@@ -155,7 +155,7 @@ test_that(
     )
 
     expect_error(
-      estimate_interaction_integral(
+      est_interaction(
         point_pattern = point_pattern,
         rmax = 0.1,
         lambda = c(

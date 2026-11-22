@@ -1,8 +1,5 @@
 test_that("explain_gbpp public generic works correctly", {
-  skip_on_cran()
-  skip_if_not(reticulate::py_available(initialize = TRUE), "Python not available")
-  
-  configure_gbpp_python()
+  skip_if_no_python("xgboost")
   
   data <- new_gbpp_data(
     X = data.frame(
@@ -19,7 +16,7 @@ test_that("explain_gbpp public generic works correctly", {
     quadrature_weight = rep(1, 4)
   )
 
-  model <- fit_gbpp_xgboost(data, params = list(eta = 0.1, max_depth = 2L), nrounds = 2L)
+  model <- fit_gbpp(data, engine = "xgboost", objective = "poisson", params = list(eta = 0.1, max_depth = 2L), n_trees = 2L)
   
   # Test default (quadrature)
   exp_quad <- explain_gbpp(model, data)
@@ -39,4 +36,40 @@ test_that("explain_gbpp public generic works correctly", {
   expect_equal(nrow(exp_all$shap), 4)
   expect_equal(nrow(exp_all$data), 4)
   expect_equal(exp_all$data$v1, c(1, 3, 5, 7))
+
+  out <- utils::capture.output(ret <- print(exp_quad))
+  expect_identical(ret, exp_quad)
+  expect_true(any(grepl("TreeSHAP Model Explanation", out)))
+})
+
+test_that("plot.gbpp_explanation renders importance, numeric dependence, and categorical boxplots", {
+  exp_demo <- structure(
+    list(
+      shap = matrix(
+        c(0.2, -0.1, 0.3, -0.2, 0.05, 0.1, 0.05, -0.05, 0.1, -0.1, -0.2, 0.15,
+          0.1, 0.2, -0.1, 0.05, -0.2, 0.15, -0.05, 0.05, 0.2),
+        ncol = 3,
+        dimnames = list(NULL, c("x", "y", "grp"))
+      ),
+      bias = rep(-1.0, 7),
+      data = data.frame(
+        x = c(0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 0.9),
+        y = c(0.9, 0.7, 0.5, 0.3, 0.4, 0.6, 0.2),
+        grp = factor(c("A", "B", "A", "C", "B", "C", "A"))
+      )
+    ),
+    class = "gbpp_explanation"
+  )
+
+  tmp_pdf <- tempfile(fileext = ".pdf")
+  grDevices::pdf(tmp_pdf)
+  on.exit({
+    if (grDevices::dev.cur() > 1L) grDevices::dev.off()
+    unlink(tmp_pdf)
+  }, add = TRUE)
+
+  expect_identical(plot(exp_demo, type = "importance"), exp_demo)
+  expect_identical(plot(exp_demo, type = "dependence"), exp_demo)
+  expect_identical(plot(exp_demo, type = "dependence", feature = "grp"), exp_demo)
+  expect_error(plot(exp_demo, type = "dependence", feature = "missing_col"), "not found")
 })

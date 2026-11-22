@@ -24,6 +24,7 @@ make_test_network_data <- function() {
 
 
 test_that("network preparation constructs general Berman-Turner data", {
+  skip_if_not_installed("spatstat.data")
   fixture <- make_test_network_data()
 
   result <- prepare_gbpp_network(
@@ -51,9 +52,10 @@ test_that("network preparation constructs general Berman-Turner data", {
   expect_true(is.numeric(result$X$numeric))
   expect_false(anyNA(result$X))
 
+  expect_s3_class(result$locations, "lpp")
   expect_equal(
     nrow(result$X),
-    length(result$locations$x)
+    spatstat.geom::npoints(result$locations)
   )
 
   expect_true(all(is.finite(result$dummy_intensity)))
@@ -66,6 +68,7 @@ test_that("network preparation constructs general Berman-Turner data", {
 
 
 test_that("network preparation accepts no covariates", {
+  skip_if_not_installed("spatstat.data")
   fixture <- make_test_network_data()
 
   result <- prepare_gbpp_network(
@@ -81,6 +84,7 @@ test_that("network preparation accepts no covariates", {
 
 
 test_that("network preparation rejects unnamed covariates", {
+  skip_if_not_installed("spatstat.data")
   fixture <- make_test_network_data()
 
   expect_error(
@@ -95,6 +99,7 @@ test_that("network preparation rejects unnamed covariates", {
 
 
 test_that("network preparation rejects duplicate covariate names", {
+  skip_if_not_installed("spatstat.data")
   fixture <- make_test_network_data()
 
   covariates <- list(
@@ -114,6 +119,7 @@ test_that("network preparation rejects duplicate covariate names", {
 
 
 test_that("network preparation rejects invalid network covariates", {
+  skip_if_not_installed("spatstat.data")
   data(chicago, package = "spatstat.data")
 
   expect_error(
@@ -144,6 +150,7 @@ test_that("network preparation validates point pattern", {
 
 
 test_that("network preparation validates nd", {
+  skip_if_not_installed("spatstat.data")
   fixture <- make_test_network_data()
 
   expect_error(
@@ -164,6 +171,7 @@ test_that("network preparation validates nd", {
 })
 
 test_that("prepare_gbpp_network accepts linfun covariates", {
+  skip_if_not_installed("spatstat.data")
   data(chicago, package = "spatstat.data")
 
   L <- spatstat.linnet::as.linnet(chicago)
@@ -188,6 +196,7 @@ test_that("prepare_gbpp_network accepts linfun covariates", {
 
 
 test_that("prepare_gbpp_network accepts linim covariates", {
+  skip_if_not_installed("spatstat.data")
   data(chicago, package = "spatstat.data")
 
   L <- spatstat.linnet::as.linnet(chicago)
@@ -210,4 +219,21 @@ test_that("prepare_gbpp_network accepts linim covariates", {
   expect_equal(ncol(out$X), 1L)
   expect_identical(names(out$X), "xy_sum")
   expect_true(all(is.finite(out$X$xy_sum)))
+})
+
+test_that("prepare_gbpp_network preserves factor-valued linim covariates", {
+  skip_if_not_installed("spatstat.data")
+  data(simplenet, package = "spatstat.data")
+
+  pts <- spatstat.linnet::runiflpp(8, L = simplenet)
+  fac_im <- spatstat.linnet::as.linim(
+    spatstat.linnet::linfun(
+      function(x, y, seg, tp) factor(ifelse(seg %% 2L == 0L, "even", "odd"), levels = c("odd", "even")),
+      L = simplenet
+    ),
+    delta = 0.1
+  )
+  out <- prepare_gbpp_network(pts, covariates = list(road = fac_im), nd = 10L)
+  expect_true(is.factor(out$X$road) || is.character(out$X$road))
+  expect_false(anyNA(out$X$road))
 })

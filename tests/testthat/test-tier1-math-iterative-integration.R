@@ -1,5 +1,7 @@
 test_that("attached interaction integral supports iterative Poisson XGBoost", {
   skip_if_not_installed("spatstat.explore")
+  skip_if_not_installed("spatstat.data")
+  skip_if_no_python("xgboost")
 
   data(lansing, package = "spatstat.data")
 
@@ -28,7 +30,7 @@ test_that("attached interaction integral supports iterative Poisson XGBoost", {
     interaction_integral = NULL
   )
 
-  data_object <- attach_interaction_integral(
+  data_object <- attach_interaction(
     data = data_object,
     point_pattern = lansing[seq_len(5)],
     rmax = 0.2,
@@ -44,14 +46,16 @@ test_that("attached interaction integral supports iterative Poisson XGBoost", {
     all(is.finite(data_object$interaction_integral))
   )
 
-  fit <- fit_gbpp_xgboost_iterative_poisson(
+  fit <- fit_gbpp(
     data = data_object,
+    engine = "xgboost",
+    objective = "iterative_poisson",
     params = list(
       eta = 0.05,
       max_depth = 2L,
       verbosity = 0L
     ),
-    num_boost_round = 5L
+    n_trees = 5L
   )
 
   expect_s3_class(
@@ -70,6 +74,8 @@ test_that("attached interaction integral supports iterative Poisson XGBoost", {
 
 test_that("attached interaction integral supports iterative Logistic XGBoost", {
   skip_if_not_installed("spatstat.explore")
+  skip_if_not_installed("spatstat.data")
+  skip_if_no_python("xgboost")
 
   data(lansing, package = "spatstat.data")
 
@@ -98,7 +104,7 @@ test_that("attached interaction integral supports iterative Logistic XGBoost", {
     interaction_integral = NULL
   )
 
-  data_object <- attach_interaction_integral(
+  data_object <- attach_interaction(
     data = data_object,
     point_pattern = lansing[seq_len(5)],
     rmax = 0.2,
@@ -114,14 +120,16 @@ test_that("attached interaction integral supports iterative Logistic XGBoost", {
     all(is.finite(data_object$interaction_integral))
   )
 
-  fit <- fit_gbpp_xgboost_iterative_logistic(
+  fit <- fit_gbpp(
     data = data_object,
+    engine = "xgboost",
+    objective = "iterative_logistic",
     params = list(
       eta = 0.05,
       max_depth = 2L,
       verbosity = 0L
     ),
-    num_boost_round = 5L
+    n_trees = 5L
   )
 
   expect_s3_class(

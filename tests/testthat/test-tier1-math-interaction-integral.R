@@ -5,7 +5,7 @@ test_that(
     K_value <- 10
     rmax <- 1
 
-    result <- calculate_interaction_integral(
+    result <- calc_interaction(
       K_value = K_value,
       rmax = rmax
     )
@@ -25,7 +25,7 @@ test_that(
     K_value <- 2
     rmax <- 1
 
-    result <- calculate_interaction_integral(
+    result <- calc_interaction(
       K_value = K_value,
       rmax = rmax
     )
@@ -45,7 +45,7 @@ test_that(
     K_value <- 20
     rmax <- 2
 
-    result <- calculate_interaction_integral(
+    result <- calc_interaction(
       K_value = K_value,
       rmax = rmax
     )
@@ -65,7 +65,7 @@ test_that(
   {
 
     expect_error(
-      calculate_interaction_integral(
+      calc_interaction(
         K_value = c(10, 11),
         rmax = 1
       ),
@@ -73,7 +73,7 @@ test_that(
     )
 
     expect_error(
-      calculate_interaction_integral(
+      calc_interaction(
         K_value = NA_real_,
         rmax = 1
       ),
@@ -88,7 +88,7 @@ test_that(
   {
 
     expect_error(
-      calculate_interaction_integral(
+      calc_interaction(
         K_value = 10,
         rmax = 0
       ),
@@ -96,7 +96,7 @@ test_that(
     )
 
     expect_error(
-      calculate_interaction_integral(
+      calc_interaction(
         K_value = 10,
         rmax = -1
       ),
@@ -104,7 +104,7 @@ test_that(
     )
 
     expect_error(
-      calculate_interaction_integral(
+      calc_interaction(
         K_value = 10,
         rmax = NA_real_
       ),
@@ -118,7 +118,7 @@ test_that(
   "interaction integral is finite for valid input",
   {
 
-    result <- calculate_interaction_integral(
+    result <- calc_interaction(
       K_value = 15,
       rmax = 2
     )

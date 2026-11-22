@@ -1,5 +1,6 @@
 test_that("plot.gbpp_cv executes without error", {
   skip_if_not_installed("spatstat.geom")
+  skip_if_no_python("xgboost")
   
   set.seed(42)
   X <- data.frame(x1 = runif(100), x2 = runif(100))
@@ -9,7 +10,7 @@ test_that("plot.gbpp_cv executes without error", {
   
   data <- new_gbpp_data(X = X, y = y, locations = locations, quadrature_weight = w, type = "planar", window = spatstat.geom::square(1))
   
-  res <- cv_gbpp(data, engine = "xgboost", params = list(eta = 0.1, max_depth = 2L), nrounds = 5L, folds = 3L)
+  res <- cv_gbpp(data, engine = "xgboost", params = list(eta = 0.1, max_depth = 2L), n_trees = 5L, folds = 3L)
   
   # Just test that plotting doesn't throw errors
   expect_silent({

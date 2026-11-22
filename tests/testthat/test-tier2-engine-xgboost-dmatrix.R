@@ -1,9 +1,5 @@
 test_that("XGBoost DMatrix handles one feature", {
-  skip_on_cran()
-  skip_if_not(
-    reticulate::py_available(),
-    message = "Python is not available."
-  )
+  skip_if_no_python("xgboost")
 
   X <- data.frame(
     numeric = c(1, 2, 3, 4, 5)
@@ -11,7 +7,7 @@ test_that("XGBoost DMatrix handles one feature", {
 
   y <- c(0, 1, 0, 1, 0)
 
-  dtrain <- gbpp:::.gbpp_xgboost_dmatrix(
+  dtrain <- mlpp:::.gbpp_xgboost_dmatrix(
     X = X,
     y = y
   )
@@ -25,11 +21,7 @@ test_that("XGBoost DMatrix handles one feature", {
 
 
 test_that("XGBoost DMatrix handles multiple features", {
-  skip_on_cran()
-  skip_if_not(
-    reticulate::py_available(),
-    message = "Python is not available."
-  )
+  skip_if_no_python("xgboost")
 
   X <- data.frame(
     x1 = c(1, 2, 3, 4, 5),
@@ -38,7 +30,7 @@ test_that("XGBoost DMatrix handles multiple features", {
 
   y <- c(0, 1, 0, 1, 0)
 
-  dtrain <- gbpp:::.gbpp_xgboost_dmatrix(
+  dtrain <- mlpp:::.gbpp_xgboost_dmatrix(
     X = X,
     y = y
   )

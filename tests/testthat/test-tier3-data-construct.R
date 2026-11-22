@@ -184,7 +184,7 @@ test_that("iterative Logistic requires interaction_integral", {
   )
 })
 
-test_that("attach_statistical_weight attaches and validates weights correctly", {
+test_that("attach_stat_weight attaches and validates weights correctly", {
 
   data <- new_gbpp_data(
     X = data.frame(x1 = c(1, 2)),
@@ -194,21 +194,25 @@ test_that("attach_statistical_weight attaches and validates weights correctly", 
   )
 
   expect_error(
-    attach_statistical_weight(list(), c(1, 1)),
+    attach_stat_weight(list(), c(1, 1)),
     "`data` must be a `gbpp_data` object"
   )
 
   expect_error(
-    attach_statistical_weight(data, c(1, 1, 1)),
+    attach_stat_weight(data, c(1, 1, 1)),
     "number of quadrature points"
   )
 
   expect_error(
-    attach_statistical_weight(data, c(-1, 1)),
+    attach_stat_weight(data, c(-1, 1)),
     "strictly positive"
   )
 
-  data_wt <- attach_statistical_weight(data, c(0.8, 1.2))
+  data_wt <- attach_stat_weight(data, c(0.8, 1.2))
   expect_equal(data_wt$statistical_weight, c(0.8, 1.2))
   expect_true(validate_gbpp_data(data_wt, objective = "weighted_poisson"))
+
+  out <- utils::capture.output(ret <- print(data_wt))
+  expect_identical(ret, data_wt)
+  expect_true(any(grepl("GBPP Point Process Data Object", out)))
 })

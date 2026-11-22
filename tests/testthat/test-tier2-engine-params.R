@@ -1,6 +1,6 @@
 test_that(".gbpp_normalize_params standardizes parameters across engines", {
   # XGBoost mapping
-  xgb_res <- gbpp:::.gbpp_normalize_params(
+  xgb_res <- mlpp:::.gbpp_normalize_params(
     engine = "xgboost",
     n_trees = 50L,
     learning_rate = 0.03,
@@ -19,7 +19,7 @@ test_that(".gbpp_normalize_params standardizes parameters across engines", {
   expect_equal(xgb_res$params$verbosity, 0L)
 
   # LightGBM mapping
-  lgb_res <- gbpp:::.gbpp_normalize_params(
+  lgb_res <- mlpp:::.gbpp_normalize_params(
     engine = "lightgbm",
     n_trees = 75L,
     learning_rate = 0.03,
@@ -38,7 +38,7 @@ test_that(".gbpp_normalize_params standardizes parameters across engines", {
   expect_equal(lgb_res$params$verbosity, -1L)
 
   # CatBoost mapping
-  cat_res <- gbpp:::.gbpp_normalize_params(
+  cat_res <- mlpp:::.gbpp_normalize_params(
     engine = "catboost",
     n_trees = 100L,
     learning_rate = 0.03,
@@ -55,22 +55,31 @@ test_that(".gbpp_normalize_params standardizes parameters across engines", {
   expect_equal(cat_res$params$rsm, 0.7)
   expect_equal(cat_res$params$random_seed, 42L)
   expect_equal(cat_res$params$verbose, FALSE)
+  expect_equal(cat_res$params$one_hot_max_size, 0L)
 })
 
 test_that(".gbpp_normalize_params preserves engine-specific user parameters", {
-  res <- gbpp:::.gbpp_normalize_params(
+  res <- mlpp:::.gbpp_normalize_params(
     engine = "xgboost",
     n_trees = 10L,
     user_params = list(gamma = 0.5, min_child_weight = 2.0)
   )
   expect_equal(res$params$gamma, 0.5)
   expect_equal(res$params$min_child_weight, 2.0)
+
+  cat_override <- mlpp:::.gbpp_normalize_params(
+    engine = "catboost",
+    n_trees = 10L,
+    user_params = list(one_hot_max_size = 2L, boosting_type = "Ordered")
+  )
+  expect_equal(cat_override$params$one_hot_max_size, 2L)
+  expect_equal(cat_override$params$boosting_type, "Ordered")
 })
 
 test_that(".gbpp_normalize_params validates arguments properly", {
-  expect_error(gbpp:::.gbpp_normalize_params("xgboost", n_trees = -1L), "n_trees")
-  expect_error(gbpp:::.gbpp_normalize_params("xgboost", learning_rate = -0.1), "learning_rate")
-  expect_error(gbpp:::.gbpp_normalize_params("xgboost", max_depth = 0L), "max_depth")
-  expect_error(gbpp:::.gbpp_normalize_params("xgboost", subsample = 1.5), "subsample")
-  expect_error(gbpp:::.gbpp_normalize_params("xgboost", colsample_bytree = 0), "colsample_bytree")
+  expect_error(mlpp:::.gbpp_normalize_params("xgboost", n_trees = -1L), "n_trees")
+  expect_error(mlpp:::.gbpp_normalize_params("xgboost", learning_rate = -0.1), "learning_rate")
+  expect_error(mlpp:::.gbpp_normalize_params("xgboost", max_depth = 0L), "max_depth")
+  expect_error(mlpp:::.gbpp_normalize_params("xgboost", subsample = 1.5), "subsample")
+  expect_error(mlpp:::.gbpp_normalize_params("xgboost", colsample_bytree = 0), "colsample_bytree")
 })

@@ -1,4 +1,5 @@
 test_that("extract_dummy_intensity extracts rho from logistic quadrature", {
+  skip_if_not_installed("spatstat.random")
 
   W <- spatstat.geom::owin(
     xrange = c(0, 1),
@@ -31,6 +32,7 @@ test_that("extract_dummy_intensity extracts rho from logistic quadrature", {
 })
 
 test_that("dummy intensity is distinct from quadrature weight", {
+  skip_if_not_installed("spatstat.random")
 
   W <- spatstat.geom::owin(
     xrange = c(0, 1),
@@ -64,6 +66,7 @@ test_that("dummy intensity is distinct from quadrature weight", {
 })
 
 test_that("extract_dummy_intensity fails when rho is unavailable", {
+  skip_if_not_installed("spatstat.random")
 
   W <- spatstat.geom::owin(
     xrange = c(0, 1),
@@ -86,21 +89,21 @@ test_that("extract_dummy_intensity fails when rho is unavailable", {
   )
 })
 
-test_that("calculate_planar_dummy_intensity calculates m / |W| correctly", {
+test_that("calc_dummy_intensity calculates m / |W| correctly", {
   W <- spatstat.geom::owin(c(0, 2), c(0, 3)) # area = 6
   y <- c(rep(1, 10), rep(0, 30)) # 30 dummy points
   
   # Passing window
-  delta <- calculate_planar_dummy_intensity(y, W)
+  delta <- calc_dummy_intensity(y, W)
   expect_equal(delta, 30 / 6)
   
   # Passing quadrature weights summing to area
   w <- rep(6 / 40, 40)
-  delta_w <- calculate_planar_dummy_intensity(y, w)
+  delta_w <- calc_dummy_intensity(y, w)
   expect_equal(delta_w, 30 / 6)
   
   # Input validation
-  expect_error(calculate_planar_dummy_intensity(c(1, 2), W))
-  expect_error(calculate_planar_dummy_intensity(rep(1, 10), W), "At least one dummy point is required")
+  expect_error(calc_dummy_intensity(c(1, 2), W))
+  expect_error(calc_dummy_intensity(rep(1, 10), W), "At least one dummy point is required")
 })
 

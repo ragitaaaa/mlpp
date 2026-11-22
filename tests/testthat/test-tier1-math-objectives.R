@@ -16,7 +16,7 @@ test_that("Poisson derivatives are calculated correctly", {
     log(4)
   )
 
-  result <- gbpp_objective(
+  result <- calc_objective(
     data = data,
     prediction = prediction,
     objective = "poisson"
@@ -45,6 +45,25 @@ test_that("Poisson derivatives are calculated correctly", {
   )
 })
 
+test_that("Weighted Poisson derivatives are calculated correctly", {
+  data <- new_gbpp_data(
+    X = data.frame(x1 = 1:3),
+    y = c(1, 0, 0),
+    locations = data.frame(x = 1:3, y = 1:3),
+    quadrature_weight = c(0.2, 0.3, 0.5),
+    statistical_weight = c(2.0, 0.5, 1.5)
+  )
+
+  prediction <- c(log(2), log(3), log(4))
+  result <- calc_objective(data, prediction, objective = "weighted_poisson")
+
+  expected_gradient <- c(2.0 * (0.2 * 2 - 1), 0.5 * (0.3 * 3), 1.5 * (0.5 * 4))
+  expected_hessian <- c(2.0 * (0.2 * 2), 0.5 * (0.3 * 3), 1.5 * (0.5 * 4))
+
+  expect_equal(result$gradient, expected_gradient, tolerance = 1e-12)
+  expect_equal(result$hessian, expected_hessian, tolerance = 1e-12)
+})
+
 test_that("Logistic derivatives are calculated correctly", {
   data <- new_gbpp_data(
     X = data.frame(x1 = 1:3),
@@ -58,7 +77,7 @@ test_that("Logistic derivatives are calculated correctly", {
 
   prediction <- rep(log(100), 3)
 
-  result <- gbpp_objective(
+  result <- calc_objective(
     data = data,
     prediction = prediction,
     objective = "logistic"
@@ -96,7 +115,7 @@ test_that("Weighted logistic derivatives are calculated correctly", {
 
   prediction <- rep(log(100), 3)
 
-  result <- gbpp_objective(
+  result <- calc_objective(
     data = data,
     prediction = prediction,
     objective = "weighted_logistic"
@@ -141,7 +160,7 @@ test_that("Logistic derivatives remain finite for large predictions", {
 
   prediction <- c(1000, -1000)
 
-  result <- gbpp_objective(
+  result <- calc_objective(
     data = data,
     prediction = prediction,
     objective = "logistic"
@@ -184,7 +203,7 @@ test_that("iterative Poisson objective matches theoretical derivatives", {
     0
   )
 
-  result <- gbpp_objective(
+  result <- calc_objective(
     data = data,
     prediction = prediction,
     objective = "iterative_poisson"
@@ -232,35 +251,22 @@ test_that("iterative Poisson objective matches theoretical derivatives", {
   )
 })
 
-test_that("iterative Poisson objective is available through gbpp_objective", {
-
+test_that("iterative Poisson reduces to Poisson when interaction is zero", {
   data <- new_gbpp_data(
-    X = data.frame(
-      x1 = c(1, 2),
-      x2 = c(2, 1)
-    ),
-    y = c(1, 0),
-    locations = data.frame(
-      x = c(0, 1),
-      y = c(0, 1)
-    ),
-    quadrature_weight = c(
-      0.25,
-      0.25
-    ),
-    interaction_integral = c(
-      0,
-      1
-    )
+    X = data.frame(x1 = c(1, 2, 3), x2 = c(3, 2, 1)),
+    y = c(1, 0, 1),
+    locations = data.frame(x = c(0, 1, 2), y = c(0, 1, 2)),
+    quadrature_weight = c(0.2, 0.3, 0.4),
+    interaction_integral = c(0, 0, 0)
   )
 
-  expect_no_error(
-    gbpp_objective(
-      data = data,
-      prediction = c(0, 0),
-      objective = "iterative_poisson"
-    )
-  )
+  prediction <- c(-0.5, 0.2, 0.7)
+  poisson <- calc_objective(data, prediction, objective = "poisson")
+  iterative <- calc_objective(data, prediction, objective = "iterative_poisson")
+
+  expect_equal(iterative$weight, rep(1, 3))
+  expect_equal(iterative$gradient, poisson$gradient)
+  expect_equal(iterative$hessian, poisson$hessian)
 })
 
 test_that(
@@ -298,7 +304,7 @@ test_that(
       1
     )
 
-    result <- gbpp_objective(
+    result <- calc_objective(
       data = data,
       prediction = prediction,
       objective = "iterative_logistic"

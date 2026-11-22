@@ -1,4 +1,6 @@
 test_that("estimated network interaction can be attached to gbpp_data", {
+  skip_if_not_installed("spatstat.data")
+  skip_if_not_installed("spatstat.linnet")
   set.seed(123)
 
   fixture <- make_network_integration_fixture()
@@ -9,7 +11,7 @@ test_that("estimated network interaction can be attached to gbpp_data", {
     nd = 20L
   )
 
-  result <- attach_network_interaction_integral(
+  result <- attach_net_interaction(
     data = data,
     point_pattern = fixture$point_pattern,
     rmax = 0.1,

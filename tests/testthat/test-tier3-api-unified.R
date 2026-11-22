@@ -1,7 +1,5 @@
 test_that("fit_gbpp fits across all engines with unified API", {
-  skip_on_cran()
-  skip_if_not(reticulate::py_available(initialize = TRUE), message = "Python is not available.")
-  configure_gbpp_python()
+  skip_if_no_python(c("xgboost", "lightgbm", "catboost"))
 
   data <- make_small_gbpp_data()
 
@@ -46,9 +44,7 @@ test_that("fit_gbpp fits across all engines with unified API", {
 })
 
 test_that("predict.gbpp_model respects type contract: intensity, link, and raw", {
-  skip_on_cran()
-  skip_if_not(reticulate::py_available(initialize = TRUE), message = "Python is not available.")
-  configure_gbpp_python()
+  skip_if_no_python("xgboost")
 
   data <- make_small_gbpp_data()
 
@@ -88,4 +84,24 @@ test_that("fit_gbpp errors on invalid inputs", {
   expect_error(
     fit_gbpp(data = list(not = "data"), engine = "xgboost")
   )
+})
+
+test_that("print.gbpp_model prints scalar and vector baselines without error", {
+  skip_if_no_python("xgboost")
+
+  data <- make_small_gbpp_data()
+  fit_scalar <- fit_gbpp(data, engine = "xgboost", objective = "poisson", n_trees = 3L)
+  out_s <- utils::capture.output(ret_s <- print(fit_scalar))
+  expect_identical(ret_s, fit_scalar)
+  expect_true(any(grepl("Baseline \\(eta0\\)", out_s)))
+
+  fit_vec <- fit_gbpp(
+    data,
+    engine = "xgboost",
+    objective = "poisson",
+    n_trees = 3L,
+    baseline = seq(-1.0, 0.0, length.out = nrow(data$X))
+  )
+  out_v <- utils::capture.output(print(fit_vec))
+  expect_true(any(grepl("vector", out_v)))
 })

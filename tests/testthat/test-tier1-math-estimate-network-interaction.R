@@ -1,4 +1,5 @@
 test_that("network interaction integral can be estimated from linearpcfinhom", {
+  skip_if_not_installed("spatstat.data")
   set.seed(123)
 
   data(simplenet, package = "spatstat.data")
@@ -8,7 +9,7 @@ test_that("network interaction integral can be estimated from linearpcfinhom", {
     L = simplenet
   )
 
-  result <- estimate_network_interaction_integral(
+  result <- est_net_interaction(
     point_pattern = point_pattern,
     rmax = 0.1,
     nr = 32L
@@ -25,6 +26,7 @@ test_that("network interaction integral can be estimated from linearpcfinhom", {
 
 
 test_that("network interaction estimator validates rmax", {
+  skip_if_not_installed("spatstat.data")
   data(simplenet, package = "spatstat.data")
 
   point_pattern <- spatstat.linnet::runiflpp(
@@ -33,7 +35,7 @@ test_that("network interaction estimator validates rmax", {
   )
 
   expect_error(
-    estimate_network_interaction_integral(
+    est_net_interaction(
       point_pattern = point_pattern,
       rmax = 0
     ),
@@ -41,7 +43,7 @@ test_that("network interaction estimator validates rmax", {
   )
 
   expect_error(
-    estimate_network_interaction_integral(
+    est_net_interaction(
       point_pattern = point_pattern,
       rmax = NA_real_
     ),
@@ -51,6 +53,7 @@ test_that("network interaction estimator validates rmax", {
 
 
 test_that("network interaction estimator validates correction", {
+  skip_if_not_installed("spatstat.data")
   data(simplenet, package = "spatstat.data")
 
   point_pattern <- spatstat.linnet::runiflpp(
@@ -59,7 +62,7 @@ test_that("network interaction estimator validates correction", {
   )
 
   expect_error(
-    estimate_network_interaction_integral(
+    est_net_interaction(
       point_pattern = point_pattern,
       rmax = 0.1,
       correction = "isotropic"
