@@ -266,12 +266,9 @@ plot(shap_output, type = "dependence", feature = "grad")
 | Function | Primary Purpose | Key Arguments |
 |---|---|---|
 | `install_gbpp_python()` | Automated Python virtualenv setup | `envname = "r-gbpp"`, `method = "auto"` |
-| `configure_gbpp_python()` | Configure `reticulate` Python interpreter | *(None)* |
 | `check_gbpp_python()` | Inspect Python config and engine versions | *(None)* |
-| `get_gbpp_python()` | Locate bundled `inst/python` modules | *(None)* |
 | `prepare_gbpp()` | Construct 2D planar quadrature data | `point_pattern`, `covariates`, `nd`, `quadrature_method` |
 | `prepare_gbpp_network()` | Construct 1D linear network quadrature data | `point_pattern`, `covariates`, `nd` |
-| `prepare_quad_data()` | Convert a `spatstat` quadrature scheme to `gbpp_data` | `Q`, `X`, `objective`, `type` |
 | `attach_stat_weight()` | Attach custom weights to `gbpp_data` | `data`, `weights` |
 | `attach_interaction()` | Attach planar K interaction integral for iterative objectives | `data`, `point_pattern`, `rmax`, `correction` |
 | `attach_net_interaction()` | Attach network interaction integral for iterative objectives | `data`, `point_pattern`, `rmax`, `correction` |
