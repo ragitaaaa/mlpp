@@ -1,11 +1,13 @@
-^gbpp\.Rproj$
+^mlpp\.Rproj$
 ^\.Rproj\.user(/|$)
+^\.gitattributes$
 ^LICENSE\.md$
 ^\.venv(/|$)
 ^\.Renviron$
 ^development(/|$)
 catboost_info(/|$)
 ^scratch(/|$)
+^analysis(/|$)
 ^\.antigravity(/|$)
 ^docs(/|$)
 ^references(/|$)
@@ -14,6 +16,8 @@ catboost_info(/|$)
 ^\.quarto(/|$)
 ^\.agents(/|$)
 ^rosm\.cache(/|$)
+^media(/|$)
+^Rplots\.pdf$
 ^test_yaml\.pdf$
 ^cran-comments\.md$
 ^\.github(/|$)

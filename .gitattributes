@@ -1,0 +1,13 @@
+* text=auto eol=lf
+*.R text eol=lf
+*.py text eol=lf
+*.Rd text eol=lf
+*.md text eol=lf
+*.Rmd text eol=lf
+*.bib text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+DESCRIPTION text eol=lf
+NAMESPACE text eol=lf
+.Rbuildignore text eol=lf
+.gitignore text eol=lf

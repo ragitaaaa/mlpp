@@ -11,6 +11,7 @@
 # Build and check outputs
 *.tar.gz
 *.Rcheck/
+Rplots.pdf
 
 # Python environments & caches
 .venv/
@@ -26,8 +27,12 @@ tests/testthat/catboost_info/
 scratch/
 .env
 
+# Analysis projects
+analysis/
+
 # Local development and thesis work
 development/
+media/
 rosm.cache/
 test_yaml.pdf
 
