@@ -15,17 +15,17 @@
 #'
 #' @return A named list of engine-ready training parameters.
 #' @keywords internal
-#' @export
+#' @noRd
 .gbpp_normalize_params <- function(
-    engine = c("xgboost", "lightgbm", "catboost"),
-    n_trees = 100L,
-    learning_rate = 0.05,
-    max_depth = 6L,
-    subsample = 1.0,
-    colsample_bytree = 1.0,
-    random_seed = 123L,
-    verbose = FALSE,
-    user_params = list()
+  engine = c("xgboost", "lightgbm", "catboost"),
+  n_trees = 100L,
+  learning_rate = 0.05,
+  max_depth = 6L,
+  subsample = 1.0,
+  colsample_bytree = 1.0,
+  random_seed = 123L,
+  verbose = FALSE,
+  user_params = list()
 ) {
   engine <- match.arg(engine)
 
@@ -35,7 +35,10 @@
   }
   n_trees <- as.integer(n_trees)
 
-  if (!is.numeric(learning_rate) || length(learning_rate) != 1L || !is.finite(learning_rate) || learning_rate <= 0) {
+  if (!is.numeric(learning_rate) ||
+    length(learning_rate) != 1L ||
+    !is.finite(learning_rate) ||
+    learning_rate <= 0) {
     stop("`learning_rate` must be a positive number.", call. = FALSE)
   }
 
@@ -44,23 +47,38 @@
   }
   max_depth <- as.integer(max_depth)
 
-  if (!is.numeric(subsample) || length(subsample) != 1L || !is.finite(subsample) || subsample <= 0 || subsample > 1) {
+  if (!is.numeric(subsample) ||
+    length(subsample) != 1L ||
+    !is.finite(subsample) ||
+    subsample <= 0 ||
+    subsample > 1) {
     stop("`subsample` must be a number in (0, 1].", call. = FALSE)
   }
 
-  if (!is.numeric(colsample_bytree) || length(colsample_bytree) != 1L || !is.finite(colsample_bytree) || colsample_bytree <= 0 || colsample_bytree > 1) {
+  if (!is.numeric(colsample_bytree) ||
+    length(colsample_bytree) != 1L ||
+    !is.finite(colsample_bytree) ||
+    colsample_bytree <= 0 ||
+    colsample_bytree > 1) {
     stop("`colsample_bytree` must be a number in (0, 1].", call. = FALSE)
   }
 
   random_seed <- as.integer(random_seed)
   verbose <- isTRUE(verbose)
 
-  resolved <- switch(
-    engine,
-
+  resolved <- switch(engine,
     xgboost = {
+      if (!is.null(user_params$base_score) &&
+        !isTRUE(all.equal(as.numeric(user_params$base_score), 0.0))) {
+        warning(
+          "Overriding `base_score` away from 0.0 in XGBoost shifts GBPP ",
+          "predictions relative to `baseline`.",
+          call. = FALSE
+        )
+      }
       base <- list(
         booster = "gbtree",
+        base_score = 0.0,
         eta = learning_rate,
         max_depth = max_depth,
         subsample = subsample,
@@ -70,7 +88,6 @@
       )
       utils::modifyList(base, user_params)
     },
-
     lightgbm = {
       base <- list(
         learning_rate = learning_rate,
@@ -86,8 +103,12 @@
       )
       utils::modifyList(base, user_params)
     },
-
     catboost = {
+      eff_subsample <- if (!is.null(user_params$subsample)) {
+        as.numeric(user_params$subsample)
+      } else {
+        subsample
+      }
       base <- list(
         iterations = n_trees,
         learning_rate = learning_rate,
@@ -97,8 +118,13 @@
         random_seed = random_seed,
         verbose = verbose,
         thread_count = 1L,
-        eval_metric = "RMSE"
+        eval_metric = "RMSE",
+        one_hot_max_size = 0L,
+        allow_writing_files = FALSE
       )
+      if (eff_subsample < 1.0 && is.null(user_params$bootstrap_type)) {
+        base$bootstrap_type <- "Bernoulli"
+      }
       utils::modifyList(base, user_params)
     }
   )

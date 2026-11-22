@@ -36,6 +36,12 @@ def _safe_exp(value):
     return math.exp(value)
 
 
+def _safe_sigmoid(eta, delta):
+    """Compute numerically stable logistic probability sigmoid(eta - log(delta))."""
+    logit = min(max(float(eta) - math.log(delta), _CLIP_MIN), _CLIP_MAX)
+    return 1.0 / (1.0 + math.exp(-logit))
+
+
 def _get_weights(weights, n):
     """
     Return CatBoost-provided weights.
@@ -53,6 +59,60 @@ def _get_weights(weights, n):
         raise ValueError("weights must be non-negative.")
 
     return weights
+
+
+class StatelessPoissonObjective:
+    """
+    Stateless, Numba-compilable Poisson / weighted Poisson objective.
+
+    Caller supplies `baseline = eta0 + log(quadrature_weight)` (plus any
+    custom baseline vector) and optional `weight = statistical_weight` via
+    `catboost.Pool`. Because no per-instance array state is stored on `self`,
+    CatBoost compiles `calc_ders_range` with Numba JIT and remains exact
+    under `Ordered` boosting, row subsampling, and multi-threading.
+    """
+
+    def calc_ders_range(self, approxes, targets, weights):
+        """Return (-gradient, -hessian) pairs for Poisson point process."""
+        result = []
+        for i in range(len(approxes)):
+            a = approxes[i]
+            if a < -50.0:
+                a = -50.0
+            elif a > 50.0:
+                a = 50.0
+            ea = math.exp(a)
+            w = 1.0 if weights is None else weights[i]
+            result.append((w * (targets[i] - ea), -w * ea))
+        return result
+
+
+class StatelessLogisticObjective:
+    """
+    Stateless, Numba-compilable Logistic / weighted Logistic objective.
+
+    Caller supplies `baseline = eta0 - log(dummy_intensity)` (plus any
+    custom baseline vector) and optional `weight = statistical_weight` via
+    `catboost.Pool`.
+    """
+
+    def calc_ders_range(self, approxes, targets, weights):
+        """Return (-gradient, -hessian) pairs for Baddeley logistic regression."""
+        result = []
+        for i in range(len(approxes)):
+            a = approxes[i]
+            if a < -50.0:
+                a = -50.0
+            elif a > 50.0:
+                a = 50.0
+            pi = 1.0 / (1.0 + math.exp(-a))
+            w = 1.0 if weights is None else weights[i]
+            result.append((w * (targets[i] - pi), -w * pi * (1.0 - pi)))
+        return result
+
+
+StatelessWeightedPoissonObjective = StatelessPoissonObjective
+StatelessWeightedLogisticObjective = StatelessLogisticObjective
 
 
 class _BatchObjective:
@@ -312,12 +372,7 @@ class LogisticObjective(_BatchObjective):
 
             delta = dummy_intensity[i]
 
-            pi = 1.0 / (
-                1.0
-                + math.exp(
-                    -(eta - math.log(delta))
-                )
-            )
+            pi = _safe_sigmoid(eta, delta)
 
             gradient = pi - targets[i]
 
@@ -410,12 +465,7 @@ class WeightedLogisticObjective(_BatchObjective):
 
             delta = dummy_intensity[i]
 
-            pi = 1.0 / (
-                1.0
-                + math.exp(
-                    -(eta - math.log(delta))
-                )
-            )
+            pi = _safe_sigmoid(eta, delta)
 
             w = statistical_weight[i]
 
@@ -469,8 +519,8 @@ class IterativePoissonObjective(_BatchObjective):
 
         Iterative weight:
 
-            w_i = 1 /
-                  (1 + lambda_i * A_i)
+            w_tilde_i = 1 / max(1e-4, 1 + lambda_i * A_i)
+            w_i = w_tilde_i / mean(w_tilde)
 
         GBPP derivatives:
 
@@ -507,7 +557,9 @@ class IterativePoissonObjective(_BatchObjective):
         lams = np.exp(np.clip(approxes, _CLIP_MIN, _CLIP_MAX))
         denominators = np.maximum(1e-4, 1.0 + lams * interaction_integral)
         weights = 1.0 / denominators
-        weights = weights / np.mean(weights)
+        mean_weight = np.mean(weights)
+        if mean_weight > 0.0:
+            weights = weights / mean_weight
 
         result = []
 
@@ -571,10 +623,10 @@ class IterativeLogisticObjective(_BatchObjective):
 
         Iterative logistic weight:
 
-            w_i =
+            w_tilde_i =
                 (lambda_i + delta_i)
-                --------------------------------
-                delta_i * (1 + lambda_i * A_i)
+                / [delta_i * max(1e-4, 1 + lambda_i * A_i)]
+            w_i = w_tilde_i / mean(w_tilde)
 
         where
 
@@ -619,7 +671,9 @@ class IterativeLogisticObjective(_BatchObjective):
         lams = np.exp(np.clip(approxes, _CLIP_MIN, _CLIP_MAX))
         denominators = np.maximum(1e-4, 1.0 + lams * interaction_integral)
         weights = (lams + dummy_intensity) / (dummy_intensity * denominators)
-        weights = weights / np.mean(weights)
+        mean_weight = np.mean(weights)
+        if mean_weight > 0.0:
+            weights = weights / mean_weight
 
         result = []
 
@@ -633,12 +687,7 @@ class IterativeLogisticObjective(_BatchObjective):
 
             weight = weights[i]
 
-            pi = 1.0 / (
-                1.0
-                + math.exp(
-                    -(eta - math.log(delta))
-                )
-            )
+            pi = _safe_sigmoid(eta, delta)
 
             gradient = weight * (
                 pi - targets[i]

@@ -13,7 +13,7 @@
     configure_gbpp_python()
 
     python_path <- file.path(
-      gbpp_python_path(),
+      get_gbpp_python(),
       "gbpp_catboost.py"
     )
 
@@ -52,58 +52,6 @@
 })
 
 # ============================================================
-# Objective factories
-# ============================================================
-
-#' @keywords internal
-make_catboost_poisson_objective <- function(quadrature_weight) {
-  module <- .gbpp_catboost_module()
-  module$PoissonObjective(quadrature_weight = quadrature_weight)
-}
-
-#' @keywords internal
-make_catboost_weighted_poisson_objective <- function(quadrature_weight, statistical_weight) {
-  module <- .gbpp_catboost_module()
-  module$WeightedPoissonObjective(
-    quadrature_weight = quadrature_weight,
-    statistical_weight = statistical_weight
-  )
-}
-
-#' @keywords internal
-make_catboost_logistic_objective <- function(dummy_intensity) {
-  module <- .gbpp_catboost_module()
-  module$LogisticObjective(dummy_intensity = dummy_intensity)
-}
-
-#' @keywords internal
-make_catboost_weighted_logistic_objective <- function(dummy_intensity, statistical_weight) {
-  module <- .gbpp_catboost_module()
-  module$WeightedLogisticObjective(
-    dummy_intensity = dummy_intensity,
-    statistical_weight = statistical_weight
-  )
-}
-
-#' @keywords internal
-make_catboost_iterative_poisson_objective <- function(quadrature_weight, interaction_integral) {
-  module <- .gbpp_catboost_module()
-  module$IterativePoissonObjective(
-    quadrature_weight = quadrature_weight,
-    interaction_integral = interaction_integral
-  )
-}
-
-#' @keywords internal
-make_catboost_iterative_logistic_objective <- function(dummy_intensity, interaction_integral) {
-  module <- .gbpp_catboost_module()
-  module$IterativeLogisticObjective(
-    dummy_intensity = dummy_intensity,
-    interaction_integral = interaction_integral
-  )
-}
-
-# ============================================================
 # Internal Engine Fitting Function
 # ============================================================
 
@@ -112,35 +60,44 @@ make_catboost_iterative_logistic_objective <- function(dummy_intensity, interact
 #' @keywords internal
 #' @noRd
 .gbpp_fit_catboost <- function(
-    data,
-    objective,
-    params,
-    n_trees,
-    baseline = NULL,
-    ...
+  data,
+  objective,
+  params,
+  n_trees,
+  baseline = NULL,
+  ...
 ) {
   validate_gbpp_data(data, objective = objective)
+  if (is.null(ncol(data$X)) || ncol(data$X) == 0L) {
+    stop(
+      "`data$X` must contain at least one covariate column to fit a tree model.",
+      call. = FALSE
+    )
+  }
   configure_gbpp_python()
 
   catboost <- .gbpp_catboost()
-  X <- data$X
+  feature_names <- colnames(data$X)
+  factor_levels <- .gbpp_extract_factor_levels(data$X)
+
+  cat_features_idx <- NULL
 
   # Handle data frame vs matrix and categorical columns
-  if (is.matrix(X)) {
-    if (!is.numeric(X)) {
+  if (is.matrix(data$X)) {
+    if (!is.numeric(data$X)) {
       stop("`data$X` matrix must be numeric.", call. = FALSE)
     }
-    if (any(!is.finite(X))) {
+    if (any(!is.finite(data$X))) {
       stop("`data$X` must contain only finite values.", call. = FALSE)
     }
-  } else if (is.data.frame(X)) {
+  } else if (is.data.frame(data$X)) {
     categorical_cols <- which(
-      vapply(X, function(z) is.factor(z) || is.character(z), logical(1))
+      vapply(data$X, function(z) is.factor(z) || is.character(z), logical(1))
     )
-    numeric_cols <- which(vapply(X, is.numeric, logical(1)))
+    numeric_cols <- which(vapply(data$X, is.numeric, logical(1)))
 
     if (length(numeric_cols) > 0L) {
-      numeric_values <- X[, numeric_cols, drop = FALSE]
+      numeric_values <- data$X[, numeric_cols, drop = FALSE]
       if (any(!is.finite(as.matrix(numeric_values)))) {
         stop("Numeric columns in `data$X` must contain only finite values.", call. = FALSE)
       }
@@ -148,73 +105,142 @@ make_catboost_iterative_logistic_objective <- function(dummy_intensity, interact
 
     if (length(categorical_cols) > 0L) {
       for (j in categorical_cols) {
-        if (anyNA(X[[j]])) {
-          stop("Categorical columns in `data$X` must not contain missing values.", call. = FALSE)
-        }
-        if (is.factor(X[[j]])) {
-          X[[j]] <- as.character(X[[j]])
+        if (anyNA(data$X[[j]])) {
+          stop(
+            "Categorical columns in `data$X` must not contain missing values.",
+            call. = FALSE
+          )
         }
       }
-
+      cat_features_idx <- as.integer(unname(categorical_cols - 1L))
       if (!("cat_features" %in% names(params))) {
-        params$cat_features <- reticulate::r_to_py(
-          as.list(unname(categorical_cols - 1L))
-        )
+        params$cat_features <- as.list(cat_features_idx)
       }
     }
   }
 
-  if (is.null(baseline)) {
-    if (objective %in% c("poisson", "weighted_poisson", "iterative_poisson")) {
-      lambda0 <- sum(data$y) / sum(data$quadrature_weight)
-      if (lambda0 <= 0 || !is.finite(lambda0)) {
-        stop("Initial Poisson intensity must be positive and finite.", call. = FALSE)
-      }
-      baseline <- log(lambda0)
-    } else {
-      baseline <- 0.0
-    }
-  }
-
-  py_objective <- switch(
-    objective,
-    poisson = make_catboost_poisson_objective(data$quadrature_weight),
-    weighted_poisson = make_catboost_weighted_poisson_objective(data$quadrature_weight, data$statistical_weight),
-    logistic = make_catboost_logistic_objective(data$dummy_intensity),
-    weighted_logistic = make_catboost_weighted_logistic_objective(data$dummy_intensity, data$statistical_weight),
-    iterative_poisson = make_catboost_iterative_poisson_objective(data$quadrature_weight, data$interaction_integral),
-    iterative_logistic = make_catboost_iterative_logistic_objective(data$dummy_intensity, data$interaction_integral)
+  X <- .gbpp_encode_features(
+    data$X,
+    factor_levels = factor_levels,
+    feature_names = feature_names,
+    engine = "catboost"
   )
+
+  bl <- .gbpp_init_baseline(data, objective, baseline)
+  base_vec <- if (!is.null(bl$vec)) bl$vec else rep(0.0, nrow(X))
+
+  if (is.null(params$allow_writing_files)) {
+    params$allow_writing_files <- FALSE
+  }
+  if (is.null(params$one_hot_max_size)) {
+    params$one_hot_max_size <- 0L
+  }
+
+  is_iterative <- objective %in% c("iterative_poisson", "iterative_logistic")
+
+  if (is_iterative) {
+    if (!is.null(params$boosting_type) &&
+      identical(as.character(params$boosting_type), "Ordered")) {
+      stop(
+        "CatBoost `boosting_type = 'Ordered'` is incompatible with stateful ",
+        "`iterative_*` objectives because dynamic interaction weights depend on ",
+        "per-observation `interaction_integral`. Use `boosting_type = 'Plain'` or ",
+        "use `poisson`/`logistic` with `Ordered` boosting.",
+        call. = FALSE
+      )
+    }
+    params$boosting_type <- "Plain"
+    params$has_time <- TRUE
+    params$thread_count <- 1L
+    if (!is.null(params$subsample) && as.numeric(params$subsample) < 1.0) {
+      warning(
+        "CatBoost `iterative_*` objectives require full-batch evaluation; ",
+        "overriding `subsample` to 1.0.",
+        call. = FALSE
+      )
+      params$subsample <- 1.0
+      params$bootstrap_type <- NULL
+    }
+
+    py_objective <- .gbpp_make_objective(
+      engine = "catboost",
+      objective = objective,
+      quadrature_weight = data$quadrature_weight,
+      dummy_intensity = data$dummy_intensity,
+      interaction_integral = data$interaction_integral,
+      stateless = FALSE
+    )
+
+    train_pool <- catboost$Pool(
+      data = X,
+      label = as.numeric(data$y),
+      baseline = if (bl$has_nonzero) base_vec else NULL,
+      cat_features = params$cat_features
+    )
+  } else {
+    pool_baseline <- switch(objective,
+      poisson = base_vec + log(pmax(data$quadrature_weight, 1e-300)),
+      weighted_poisson = base_vec + log(pmax(data$quadrature_weight, 1e-300)),
+      logistic = base_vec - log(data$dummy_intensity),
+      weighted_logistic = base_vec - log(data$dummy_intensity)
+    )
+
+    pool_weight <- if (objective %in% c("weighted_poisson", "weighted_logistic")) {
+      as.numeric(data$statistical_weight)
+    } else {
+      NULL
+    }
+
+    py_objective <- .gbpp_make_objective(
+      engine = "catboost",
+      objective = objective,
+      stateless = TRUE
+    )
+
+    train_pool <- catboost$Pool(
+      data = X,
+      label = as.numeric(data$y),
+      weight = pool_weight,
+      baseline = as.numeric(pool_baseline),
+      cat_features = params$cat_features
+    )
+  }
+
+  if (!is.null(params$loss_function)) {
+    warning(
+      "Ignoring user-supplied `params$loss_function`; `gbpp` supplies a custom quadrature-weighted objective.",
+      call. = FALSE
+    )
+  }
 
   params$loss_function <- py_objective
   params$iterations <- as.integer(n_trees)
 
   raw_model <- do.call(catboost$CatBoostRegressor, params)
 
-  fit_args <- list(
-    X = X,
-    y = data$y
-  )
-
-  if (!is.null(baseline) && baseline != 0.0) {
-    fit_args$baseline <- rep(as.numeric(baseline), nrow(X))
-  }
+  extra_args <- list(...)
+  extra_args$X <- NULL
+  extra_args$y <- NULL
+  fit_args <- c(list(X = train_pool), extra_args)
 
   do.call(raw_model$fit, fit_args)
 
-  attr(raw_model, "engine") <- "catboost"
-  attr(raw_model, "objective") <- objective
-  attr(raw_model, "baseline") <- baseline
-  attr(raw_model, "feature_names") <- colnames(data$X)
-  attr(raw_model, "params") <- params
-  attr(raw_model, "n_trees") <- n_trees
-  attr(raw_model, "data_info") <- list(
-    n_obs = nrow(data$X),
-    n_events = sum(data$y == 1),
-    type = data$type
+  # Store plain R metadata (avoid holding Python pointers in attributes)
+  params_meta <- params
+  params_meta$loss_function <- objective
+
+  .gbpp_finalize_model(
+    raw_model = raw_model,
+    engine = "catboost",
+    objective = objective,
+    baseline_attr = bl$attr_val,
+    feature_names = feature_names,
+    factor_levels = factor_levels,
+    params = params_meta,
+    n_trees = n_trees,
+    data = data,
+    extra_attrs = list(cat_features = cat_features_idx)
   )
-  class(raw_model) <- c("gbpp_catboost", "gbpp_model", class(raw_model))
-  raw_model
 }
 
 # ============================================================
@@ -223,31 +249,28 @@ make_catboost_iterative_logistic_objective <- function(dummy_intensity, interact
 
 #' @export
 .gbpp_shap.gbpp_catboost <- function(object, newdata, ...) {
-  configure_gbpp_python()
-  
-  if (!is.null(attr(object, "feature_names"))) {
-    newdata <- newdata[, attr(object, "feature_names"), drop = FALSE]
-  }
-
+  object <- .gbpp_rehydrate_model(object)
   catboost <- .gbpp_catboost()
-  
-  # Check categorical features for Pool creation
-  params <- attr(object, "params")
-  cat_features <- params$cat_features
-  
-  if (is.data.frame(newdata) && !is.null(cat_features)) {
-      pool <- catboost$Pool(data = newdata, cat_features = cat_features)
-  } else {
-      pool <- catboost$Pool(data = as.matrix(newdata))
-  }
-  
-  shap_vals <- object$get_feature_importance(data = pool, type = "ShapValues")
-  
-  colnames(shap_vals) <- c(attr(object, "feature_names"), "bias")
-  
-  list(
-    shap = shap_vals[, -ncol(shap_vals), drop = FALSE],
-    bias = shap_vals[, ncol(shap_vals)]
-  )
-}
 
+  feat_names <- attr(object, "feature_names")
+  X_enc <- .gbpp_encode_features(
+    newdata,
+    factor_levels = attr(object, "factor_levels"),
+    feature_names = feat_names,
+    engine = "catboost"
+  )
+
+  cat_idx <- attr(object, "cat_features")
+  if (is.null(cat_idx) && !is.null(attr(object, "factor_levels")) && !is.null(feat_names)) {
+    cat_idx <- as.integer(which(feat_names %in% names(attr(object, "factor_levels"))) - 1L)
+  }
+
+  if (is.data.frame(X_enc) && !is.null(cat_idx) && length(cat_idx) > 0L) {
+    pool <- catboost$Pool(data = X_enc, cat_features = as.list(as.integer(cat_idx)))
+  } else {
+    pool <- catboost$Pool(data = as.matrix(X_enc))
+  }
+
+  shap_vals <- object$get_feature_importance(data = pool, type = "ShapValues")
+  .gbpp_finalize_shap(shap_vals, object, nrow(X_enc))
+}

@@ -1,5 +1,12 @@
 import numpy as np
 
+
+def _safe_sigmoid(phi, log_dummy_intensity):
+    """Compute numerically stable logistic probability sigmoid(phi - log_delta)."""
+    logit = np.clip(phi - log_dummy_intensity, -50.0, 50.0)
+    return 1.0 / (1.0 + np.exp(-logit))
+
+
 def make_poisson_objective(quadrature_weight):
     """
     Create the GBPP Poisson custom objective for XGBoost.
@@ -106,12 +113,7 @@ def make_logistic_objective(dummy_intensity):
         phi = np.clip(preds, -50.0, 50.0)
         labels = dtrain.get_label()
 
-        pi = 1.0 / (
-            1.0
-            + np.exp(
-                -(phi - log_dummy_intensity)
-            )
-        )
+        pi = _safe_sigmoid(phi, log_dummy_intensity)
 
         gradient = pi - labels
         hessian = pi * (1.0 - pi)
@@ -157,12 +159,7 @@ def make_weighted_logistic_objective(
         phi = np.clip(preds, -50.0, 50.0)
         labels = dtrain.get_label()
 
-        pi = 1.0 / (
-            1.0
-            + np.exp(
-                -(phi - log_dummy_intensity)
-            )
-        )
+        pi = _safe_sigmoid(phi, log_dummy_intensity)
 
         gradient = (
             statistical_weight
@@ -186,8 +183,13 @@ def make_iterative_poisson_objective(
     """
     Create the GBPP iteratively weighted Poisson objective for XGBoost.
 
-    The spatial dependence weight is recalculated from the current
-    log-intensity prediction at each objective evaluation.
+    The unit-mean normalized spatial dependence weight is recalculated from
+    the current log-intensity prediction at each objective evaluation:
+
+        w_tilde_i = 1 / max(1e-4, 1 + lambda_i * A_i)
+        w_i = w_tilde_i / mean(w_tilde)
+
+    where ``lambda_i = exp(phi_i)`` and ``A_i = interaction_integral_i``.
 
     Parameters
     ----------
@@ -247,8 +249,14 @@ def make_iterative_logistic_objective(
     """
     Create the GBPP iteratively weighted logistic objective for XGBoost.
 
-    The spatial dependence-adjusted weight is recalculated from the
-    current log-intensity prediction at each objective evaluation.
+    The unit-mean normalized spatial dependence-adjusted weight is recalculated
+    from the current log-intensity prediction at each objective evaluation:
+
+        w_tilde_i = (lambda_i + delta_i) / [delta_i * max(1e-4, 1 + lambda_i * A_i)]
+        w_i = w_tilde_i / mean(w_tilde)
+
+    where ``lambda_i = exp(phi_i)``, ``delta_i`` is dummy intensity, and
+    ``A_i`` is the interaction integral.
 
     Parameters
     ----------
@@ -302,12 +310,7 @@ def make_iterative_logistic_objective(
         ) / denominator
         weight = weight / np.mean(weight)
 
-        pi = 1.0 / (
-            1.0
-            + np.exp(
-                -(phi - log_dummy_intensity)
-            )
-        )
+        pi = _safe_sigmoid(phi, log_dummy_intensity)
 
         gradient = weight * (
             pi - labels

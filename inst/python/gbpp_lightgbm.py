@@ -28,6 +28,14 @@ def _clip_prediction(preds):
     return np.clip(np.asarray(preds, dtype=float), -50.0, 50.0)
 
 
+def _safe_sigmoid(phi, log_dummy_intensity):
+    """
+    Compute numerically stable logistic probability sigmoid(phi - log_delta).
+    """
+    logit = np.clip(phi - log_dummy_intensity, -50.0, 50.0)
+    return 1.0 / (1.0 + np.exp(-logit))
+
+
 def _get_labels(train_data):
     """
     Extract labels from a LightGBM Dataset.
@@ -161,12 +169,7 @@ def make_logistic_objective(dummy_intensity):
         labels = _get_labels(train_data)
 
         # pi = sigmoid(phi - log(delta))
-        pi = 1.0 / (
-            1.0
-            + np.exp(
-                -(phi - log_dummy_intensity)
-            )
-        )
+        pi = _safe_sigmoid(phi, log_dummy_intensity)
 
         gradient = pi - labels
 
@@ -212,12 +215,7 @@ def make_weighted_logistic_objective(
         phi = _clip_prediction(preds)
         labels = _get_labels(train_data)
 
-        pi = 1.0 / (
-            1.0
-            + np.exp(
-                -(phi - log_dummy_intensity)
-            )
-        )
+        pi = _safe_sigmoid(phi, log_dummy_intensity)
 
         gradient = (
             statistical_weight
@@ -247,7 +245,8 @@ def make_iterative_poisson_objective(
     Create the iterative GBPP Poisson custom objective.
 
     Weight:
-        w_i = 1 / (1 + lambda_i * A_i)
+        w_tilde_i = 1 / max(1e-4, 1 + lambda_i * A_i)
+        w_i = w_tilde_i / mean(w_tilde)
 
     Gradient:
         g_i = w_i * (v_i * lambda_i - y_i)
@@ -257,7 +256,7 @@ def make_iterative_poisson_objective(
 
     where:
         lambda_i = exp(phi_i)
-        A_i       = interaction_integral_i
+        A_i      = interaction_integral_i
     """
 
     quadrature_weight = np.asarray(
@@ -316,10 +315,10 @@ def make_iterative_logistic_objective(
     Create the iterative GBPP logistic custom objective.
 
     Weight:
-        w_i =
+        w_tilde_i =
             (lambda_i + delta_i)
-            /
-            [delta_i * (1 + lambda_i * A_i)]
+            / [delta_i * max(1e-4, 1 + lambda_i * A_i)]
+        w_i = w_tilde_i / mean(w_tilde)
 
     Gradient:
         g_i = w_i * (pi_i - y_i)
@@ -329,8 +328,8 @@ def make_iterative_logistic_objective(
 
     where:
         lambda_i = exp(phi_i)
-        delta_i   = dummy intensity
-        A_i       = interaction integral
+        delta_i  = dummy intensity
+        A_i      = interaction integral
     """
 
     dummy_intensity = np.asarray(
@@ -372,12 +371,7 @@ def make_iterative_logistic_objective(
         )
         weight = weight / np.mean(weight)
 
-        pi = 1.0 / (
-            1.0
-            + np.exp(
-                -(phi - log_dummy_intensity)
-            )
-        )
+        pi = _safe_sigmoid(phi, log_dummy_intensity)
 
         gradient = weight * (
             pi - labels
