@@ -22,3 +22,24 @@ Checks the structure and required components of a \code{gbpp_data} object.
 When an objective is supplied, also checks that the data object contains
 the quantities required by that objective.
 }
+\details{
+Verifies structural invariants of \code{data}: \code{X} is a non-empty matrix or data frame,
+\code{y} is binary (\code{0}/\code{1}), \code{locations} matches \code{nrow(X)}, and domain-specific
+quantities required by \code{objective} (such as \code{quadrature_weight}, \code{dummy_intensity},
+\code{statistical_weight}, or \code{interaction_integral}) are present, finite, and
+properly sized.
+}
+\examples{
+dat <- new_gbpp_data(
+  X = data.frame(x = c(0.2, 0.8, 0.5)),
+  y = c(1, 0, 0),
+  locations = data.frame(x = c(0.2, 0.8, 0.5), y = c(0.3, 0.7, 0.5)),
+  quadrature_weight = c(0.2, 0.4, 0.4),
+  type = "planar"
+)
+validate_gbpp_data(dat, objective = "poisson")
+}
+\seealso{
+\code{\link[=new_gbpp_data]{new_gbpp_data()}}, \code{\link[=prepare_gbpp]{prepare_gbpp()}}, \code{\link[=prepare_gbpp_network]{prepare_gbpp_network()}},
+\code{\link[=fit_gbpp]{fit_gbpp()}}
+}

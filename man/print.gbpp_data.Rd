@@ -15,5 +15,24 @@
 Invisibly returns \code{x}.
 }
 \description{
-Print a GBPP data object
+Prints a compact summary of a \code{gbpp_data} object, including domain type,
+event and dummy point counts, covariate names, and presence of quadrature,
+dummy-intensity, statistical, and interaction-integral weights.
+}
+\details{
+Displays high-level diagnostics so users can verify quadrature balance and
+weight availability prior to calling \code{\link[=fit_gbpp]{fit_gbpp()}}.
+}
+\examples{
+dat <- new_gbpp_data(
+  X = data.frame(x = c(0.2, 0.8, 0.5)),
+  y = c(1, 0, 0),
+  locations = data.frame(x = c(0.2, 0.8, 0.5), y = c(0.3, 0.7, 0.5)),
+  quadrature_weight = c(0.2, 0.4, 0.4),
+  type = "planar"
+)
+print(dat)
+}
+\seealso{
+\code{\link[=new_gbpp_data]{new_gbpp_data()}}, \code{\link[=prepare_gbpp]{prepare_gbpp()}}, \code{\link[=validate_gbpp_data]{validate_gbpp_data()}}
 }

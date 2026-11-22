@@ -9,7 +9,8 @@ install_gbpp_python(envname = "r-gbpp", method = "auto", ...)
 \arguments{
 \item{envname}{Name of the Python virtual environment. Default is \code{"r-gbpp"}.}
 
-\item{method}{Method passed to \code{\link[reticulate:py_install]{reticulate::py_install()}}, e.g. \code{"auto"}, \code{"virtualenv"}, or \code{"conda"}.}
+\item{method}{Method passed to \code{\link[reticulate:py_install]{reticulate::py_install()}}, e.g. \code{"auto"},
+\code{"virtualenv"}, or \code{"conda"}.}
 
 \item{...}{Additional arguments passed to \code{\link[reticulate:py_install]{reticulate::py_install()}}.}
 }
@@ -18,6 +19,24 @@ Invisibly returns \code{TRUE} on success.
 }
 \description{
 Automatically creates an isolated virtual environment (\code{"r-gbpp"}) and
-installs the required Python dependencies: \code{numpy}, \code{scipy}, \code{xgboost},
-\code{lightgbm}, and \code{catboost}.
+installs the required Python dependencies: \code{numpy}, \code{scipy}, \code{pandas},
+\code{xgboost}, \code{lightgbm}, and \code{catboost}.
+}
+\details{
+Installs the Python packages needed by \code{fit_gbpp()} and \code{explain_gbpp()}.
+Calling this function downloads packages and modifies/creates a Python
+environment; in automated environments or CRAN checks it should not be run
+automatically.
+}
+\examples{
+\dontrun{
+install_gbpp_python(envname = "r-gbpp")
+}
+}
+\references{
+Ushey, K., Allaire, J. J., & Tang, Y. (2024). \emph{reticulate: Interface to Python}.
+R package.
+}
+\seealso{
+\code{\link[=configure_gbpp_python]{configure_gbpp_python()}}, \code{\link[=check_gbpp_python]{check_gbpp_python()}}
 }

@@ -2,6 +2,9 @@
 % Please edit documentation in R/api-predict.R
 \name{predict.gbpp_model}
 \alias{predict.gbpp_model}
+\alias{predict.gbpp_xgboost}
+\alias{predict.gbpp_lightgbm}
+\alias{predict.gbpp_catboost}
 \title{Predict from a Fitted GBPP Model}
 \usage{
 \method{predict}{gbpp_model}(
@@ -10,24 +13,38 @@
   type = c("link", "intensity", "raw", "im", "linim"),
   ...
 )
+
+\method{predict}{gbpp_xgboost}(object, newdata, ...)
+
+\method{predict}{gbpp_lightgbm}(object, newdata, ...)
+
+\method{predict}{gbpp_catboost}(object, newdata, ...)
 }
 \arguments{
 \item{object}{A fitted model of class \code{gbpp_model}.}
 
 \item{newdata}{Predictor covariates. Can be:
 \itemize{
-\item A \code{data.frame} or numeric \code{matrix} of covariate values evaluated at specific locations (for \code{type} in \code{"link"}, \code{"intensity"}, \code{"raw"}).
-\item A named list of \code{spatstat.geom::im} objects (or an \code{owin} window) for 2D continuous planar evaluation (for \code{type = "im"}).
-\item A named list of \code{spatstat.linnet::linim} or \code{linfun} objects (or a \code{linnet} network) for linear network evaluation (for \code{type = "linim"}).
+\item A \code{data.frame} or numeric \code{matrix} of covariate values evaluated at
+specific locations (for \code{type} in \code{"link"}, \code{"intensity"}, \code{"raw"}).
+\item A named list of \code{spatstat.geom::im} objects (or an \code{owin} window) for
+2D continuous planar evaluation (for \code{type = "im"}).
+\item A named list of \code{spatstat.linnet::linim} or \code{linfun} objects (or a
+\code{linnet} network) for linear network evaluation (for \code{type = "linim"}).
 }}
 
 \item{type}{Type of prediction:
 \itemize{
-\item \code{"link"} (default): The complete linear predictor \eqn{\hat{\eta}(u) = \eta_0 + \sum f_m(z(u))}.
+\item \code{"link"} (default): The complete log-intensity linear predictor
+\eqn{\hat{\eta}(u) = \eta_0 + \sum_{k=1}^{K} f_k(z(u))}.
 \item \code{"intensity"}: The spatial intensity \eqn{\hat{\lambda}(u) = \exp(\hat{\eta}(u))}.
-\item \code{"raw"}: The raw ensemble contribution \eqn{\sum f_m(z(u))} without baseline offset.
-\item \code{"im"}: A continuous 2D pixel image (\code{spatstat.geom::im}) of spatial intensity across a planar window.
-\item \code{"linim"}: A continuous linear network pixel image (\code{spatstat.linnet::linim}) of spatial intensity across a network.
+\item \code{"raw"}: The raw ensemble contribution
+\eqn{\hat{F}(z(u)) = \sum_{k=1}^{K} f_k(z(u))} without baseline offset
+\eqn{\eta_0}.
+\item \code{"im"}: A continuous 2D pixel image (\code{spatstat.geom::im}) of spatial
+intensity across a planar window.
+\item \code{"linim"}: A continuous linear network pixel image
+(\code{spatstat.linnet::linim}) of spatial intensity across a network.
 }}
 
 \item{...}{Additional arguments passed to the underlying engine prediction method
@@ -42,4 +59,51 @@ an object of class \code{spatstat.geom::im} (for \code{type = "im"}), or an obje
 Evaluates the fitted gradient boosted point process model on new covariate data,
 returning the estimated log-intensity (link), spatial intensity, raw boosting tree margin,
 or continuous spatial pixel images on planar or linear network domains.
+}
+\details{
+Given fitted tree predictions \eqn{\hat{F}(z(u)) = \sum_{k=1}^{K} f_k(z(u))}
+and baseline offset \eqn{\eta_0}, \code{predict.gbpp_model()} returns:
+\itemize{
+\item \code{"link"}: \eqn{\hat{\eta}(u) = \eta_0 + \hat{F}(z(u))};
+\item \code{"intensity"}: \eqn{\hat{\lambda}(u) = \exp(\hat{\eta}(u))}, clamped safely on the
+link scale to avoid floating-point overflow;
+\item \code{"raw"}: \eqn{\hat{F}(z(u))} without the baseline offset;
+\item \code{"im"} / \code{"linim"}: spatially mapped predictions on planar pixel grids or
+linear network pixel grids.
+}
+
+Categorical columns are aligned automatically against the factor levels recorded
+at training time (\code{attr(object, "factor_levels")}). Engine-specific methods
+\code{predict.gbpp_xgboost()}, \code{predict.gbpp_lightgbm()}, and \code{predict.gbpp_catboost()}
+delegate to \code{predict.gbpp_model()}.
+}
+\examples{
+if (requireNamespace("spatstat.random", quietly = TRUE) &&
+  reticulate::py_available() &&
+  reticulate::py_module_available("xgboost")) {
+  win <- spatstat.geom::square(1)
+  pts <- spatstat.random::runifpoint(20, win = win)
+  cov_x <- spatstat.geom::as.im(function(x, y) x, W = win)
+  dat <- prepare_gbpp(pts, covariates = list(x = cov_x), nd = 16L)
+  fit <- fit_gbpp(dat, engine = "xgboost", objective = "poisson", n_trees = 10L)
+  head(predict(fit, newdata = dat$X, type = "intensity"))
+  lam_im <- predict(fit, newdata = list(x = cov_x), type = "im", dimyx = c(16, 16))
+}
+}
+\references{
+Baddeley, A., Rubak, E., & Turner, R. (2015). \emph{Spatial Point Patterns:
+Methodology and Applications with R}. Chapman and Hall/CRC.
+
+Lu, C., Guan, Y., van Lieshout, M.-C., & Xu, G. (2025). XGBoostPP: Tree-based
+estimation of point process intensity functions. \emph{Journal of Computational and
+Graphical Statistics}, 35(1), 229--240. \doi{10.1080/10618600.2025.2520582}
+
+Choiruddin, A., Tasbihi, N. L., Abbad, M. A., Syukron, M., Widhianingsih,
+T. D. A., & Mateu, J. (2026). XGBoost algorithm for a spatial point process
+intensity estimation based on logistic loss. \emph{Computational Journal of
+Mathematical and Statistical Sciences}, 5(2), 472--496.
+\doi{10.21608/cjmss.2026.452469.1353}
+}
+\seealso{
+\code{\link[=fit_gbpp]{fit_gbpp()}}, \code{\link[=plot.gbpp_model]{plot.gbpp_model()}}, \code{\link[=explain_gbpp]{explain_gbpp()}}
 }

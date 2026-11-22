@@ -9,23 +9,59 @@ explain_gbpp(object, data, background = c("quadrature", "events", "all"), ...)
 \arguments{
 \item{object}{A fitted \code{gbpp_model} object.}
 
-\item{data}{A \code{gbpp_data} object used for training or prediction.}
+\item{data}{A \code{gbpp_data} object whose observations are to be explained.}
 
-\item{background}{Character string specifying which subset of \code{data} to use as the background
-reference for SHAP calculations. Options are \code{"quadrature"} (default, uses dummy points representing
-the spatial domain), \code{"events"} (uses only observed event points), or \code{"all"} (uses all points).}
+\item{background}{Character string specifying which subset of \code{data} rows
+to evaluate: \code{"quadrature"} (default, dummy points \code{y == 0}), \code{"events"}
+(observed event points \code{y == 1}), or \code{"all"} (all rows).}
 
-\item{...}{Additional arguments passed to methods.}
+\item{...}{Additional arguments passed to engine SHAP methods.}
 }
 \value{
-A list containing:
-\item{shap}{A matrix of SHAP values for each feature on the additive link scale.}
-\item{bias}{A numeric vector of the expected baseline prediction.}
-\item{data}{The filtered covariate data frame corresponding to the extracted SHAP values.}
+A list of class \code{"gbpp_explanation"} containing:
+\item{shap}{A numeric matrix of SHAP values for each feature on the additive link scale.}
+\item{bias}{A numeric vector of baseline plus expected tree contribution on the link scale.}
+\item{data}{The subsetted covariate data frame corresponding to the evaluated rows.}
 }
 \description{
-Extracts Shapley Additive Explanations (TreeSHAP) from a fitted GBPP model.
-Following the theory of spatial point processes, the background reference distribution
-should typically represent the entire spatial domain (quadrature dummy points), not just
-the observed event locations.
+Extracts exact tree-path-dependent Shapley Additive Explanations (TreeSHAP)
+on the additive log-intensity (link) scale from a fitted GBPP model, including
+the model baseline offset so that \code{rowSums(shap) + bias} equals
+\code{predict(object, newdata, type = "link")}.
+}
+\details{
+Note that TreeSHAP computes tree-path conditional expectations over the
+fitted splits rather than interventional expectations against an external
+background sample; the \code{background} argument selects which subset of \code{data}
+observations (\code{"quadrature"}, \code{"events"}, or \code{"all"}) is evaluated and returned.
+
+TreeSHAP decomposes each observation's predicted log-intensity \eqn{\hat{\eta}(u)}
+into an intercept term \code{bias} plus exact feature attributions \eqn{\phi_j(u)}
+satisfying
+\deqn{\hat{\eta}(u) = \mathrm{bias}(u) + \sum_{j=1}^{p} \phi_j(u).}
+Subsetting via \code{background} selects which rows of \code{data} are evaluated without
+altering the tree-path conditioning embedded in the fitted trees.
+}
+\examples{
+if (requireNamespace("spatstat.random", quietly = TRUE) &&
+    reticulate::py_available() &&
+    reticulate::py_module_available("xgboost")) {
+  win <- spatstat.geom::square(1)
+  pts <- spatstat.random::runifpoint(20, win = win)
+  cov_x <- spatstat.geom::as.im(function(x, y) x, W = win)
+  dat <- prepare_gbpp(pts, covariates = list(x = cov_x), nd = 16L)
+  fit <- fit_gbpp(dat, engine = "xgboost", objective = "poisson", n_trees = 10L)
+  exp_obj <- explain_gbpp(fit, dat, background = "events")
+  print(exp_obj)
+}
+}
+\references{
+Lundberg, S. M., Erion, G., Chen, H., DeGrave, A., Prutkin, J. M., Nair, B.,
+Katz, R., Himmelfarb, J., Bansal, N., & Lee, S.-I. (2020).
+From local explanations to global understanding with explainable AI for trees.
+\emph{Nature Machine Intelligence}, 2(1), 56--67.
+\doi{10.1038/s42256-019-0138-9}
+}
+\seealso{
+\code{\link[=fit_gbpp]{fit_gbpp()}}, \code{\link[=print.gbpp_explanation]{print.gbpp_explanation()}}, \code{\link[=plot.gbpp_explanation]{plot.gbpp_explanation()}}
 }

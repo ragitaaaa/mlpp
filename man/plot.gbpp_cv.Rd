@@ -23,3 +23,43 @@ Displays the original spatial domain alongside the retained test events for
 each fold, providing a visual diagnostic of the cross-validation
 spatial balance.
 }
+\details{
+Extracts event locations (\code{y == 1}) from each held-out thinning fold in
+\code{x$folds}. When \code{separate = TRUE}, arranges \code{V} panels in a balanced grid via
+\code{graphics::par(mfrow = ...)}, restoring the caller's graphical parameters via
+\code{on.exit()}. When \code{separate = FALSE}, overlays all folds on a single spatial
+window with distinct colors and a legend.
+}
+\examples{
+win <- spatstat.geom::square(1)
+f1 <- list(
+  y = c(1, 1, 0),
+  locations = data.frame(x = c(0.2, 0.7, 0.5), y = c(0.3, 0.8, 0.5)),
+  window = win
+)
+f2 <- list(
+  y = c(1, 0),
+  locations = data.frame(x = c(0.4, 0.5), y = c(0.6, 0.5)),
+  window = win
+)
+cv_demo <- structure(
+  list(
+    metrics = list(
+      loglik_mean = -1.2, loglik_sd = 0.1,
+      deviance_mean = 2.4, deviance_sd = 0.2
+    ),
+    folds = list(f1, f2),
+    type = "planar"
+  ),
+  class = "gbpp_cv"
+)
+plot(cv_demo, separate = FALSE)
+}
+\references{
+Cronie, O., Moradi, M., & Biscio, C. A. N. (2024). A cross-validation-based
+statistical theory for point processes. \emph{Biometrika}, 111(2), 625--641.
+\doi{10.1093/biomet/asad041}
+}
+\seealso{
+\code{\link[=cv_gbpp]{cv_gbpp()}}, \code{\link[=print.gbpp_cv]{print.gbpp_cv()}}
+}

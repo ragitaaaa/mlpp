@@ -7,7 +7,7 @@
 \method{print}{gbpp_explanation}(x, ...)
 }
 \arguments{
-\item{x}{A \code{gbpp_explanation} object.}
+\item{x}{A \code{gbpp_explanation} object produced by \code{\link[=explain_gbpp]{explain_gbpp()}}.}
 
 \item{...}{Additional arguments (currently unused).}
 }
@@ -15,5 +15,26 @@
 Invisibly returns \code{x}.
 }
 \description{
-Print TreeSHAP Explanation Summary
+Prints evaluation sample count, feature count, mean baseline bias, and global
+feature importance ranked by mean absolute SHAP value on the log-intensity scale.
+}
+\details{
+Ranks predictors in descending order of
+\eqn{n_{\mathrm{eval}}^{-1}\sum_{i=1}^{n_{\mathrm{eval}}} |\phi_{ij}|}, where
+\eqn{n_{\mathrm{eval}}} is the number of evaluated rows in the chosen
+\code{background} subset.
+}
+\examples{
+exp_demo <- structure(
+  list(
+    shap = matrix(c(0.2, -0.1, 0.05, 0.3), ncol = 2, dimnames = list(NULL, c("x", "y"))),
+    bias = c(-1.0, -1.0),
+    data = data.frame(x = c(0.2, 0.8), y = c(0.4, 0.7))
+  ),
+  class = "gbpp_explanation"
+)
+print(exp_demo)
+}
+\seealso{
+\code{\link[=explain_gbpp]{explain_gbpp()}}, \code{\link[=plot.gbpp_explanation]{plot.gbpp_explanation()}}
 }

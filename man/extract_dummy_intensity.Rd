@@ -7,11 +7,35 @@
 extract_dummy_intensity(Q)
 }
 \arguments{
-\item{Q}{A logistic quadrature scheme from \code{spatstat}.}
+\item{Q}{A logistic quadrature scheme from \code{spatstat} (\code{inherits(Q, "quad")}).}
 }
 \value{
-A numeric vector with one dummy-process intensity value for each quadrature point.
+A numeric vector with one positive finite dummy-process intensity value
+for each quadrature point in \code{Q}.
 }
 \description{
-Extract dummy-process intensity from a logistic quadrature scheme
+Extracts the dummy point intensity vector stored in a \code{spatstat} logistic
+quadrature scheme (\code{quadscheme.logi}).
+}
+\details{
+Reads \code{Q$param$rho}, validates that all entries are positive finite numbers,
+and recycles scalar \code{rho} across all quadrature points in \code{Q}. Throws an error
+when \code{Q$param$rho} is absent (e.g., standard Berman-Turner \code{quadscheme()}).
+}
+\examples{
+if (requireNamespace("spatstat.random", quietly = TRUE)) {
+  win <- spatstat.geom::square(1)
+  pts <- spatstat.random::runifpoint(15, win = win)
+  Q <- spatstat.geom::quadscheme.logi(pts, dummytype = "grid", nd = 8)
+  rho <- extract_dummy_intensity(Q)
+  head(rho)
+}
+}
+\references{
+Baddeley, A., Coeurjolly, J.-F., Rubak, E., & Waagepetersen, R. (2014).
+Logistic regression for spatial Gibbs point processes. \emph{Biometrika},
+101(2), 377--392. \doi{10.1093/biomet/ast056}
+}
+\seealso{
+\code{\link[=calc_dummy_intensity]{calc_dummy_intensity()}}, \code{\link[=calc_net_dummy_intensity]{calc_net_dummy_intensity()}}, \code{\link[=prepare_gbpp]{prepare_gbpp()}}
 }

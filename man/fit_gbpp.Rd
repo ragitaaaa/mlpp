@@ -46,19 +46,83 @@ factor or character categorical covariates across all three engines.}
 
 \item{verbose}{Logical flag indicating whether training progress is printed. Default is \code{FALSE}.}
 
-\item{baseline}{Optional numeric scalar for the initial log-intensity intercept \eqn{\eta_0}.
-If \code{NULL}, it is automatically initialized to \eqn{\log(\sum y / \sum v)} for Poisson objectives.}
+\item{baseline}{Optional numeric scalar or observation-length vector for the
+initial log-intensity intercept \eqn{\eta_0}. If \code{NULL} (default), it is
+initialized to \eqn{\log(\sum_i y_i / \sum_i v_i)} (where \eqn{v_i}
+denotes the quadrature weights) for \code{"poisson"}, \code{"weighted_poisson"}, and
+\code{"iterative_poisson"} objectives, and to \code{0} for \code{"logistic"},
+\code{"weighted_logistic"}, and \code{"iterative_logistic"}.}
 
-\item{params}{Named list of backend-specific parameters to override or supplement defaults.}
+\item{params}{Named list of backend-specific parameters to override or
+supplement defaults.}
 
 \item{...}{Additional arguments passed to the backend fit call.}
 }
 \value{
-A fitted model of class \code{gbpp_model} (with subclass \code{gbpp_xgboost},
-\code{gbpp_lightgbm}, or \code{gbpp_catboost}).
+An S3 object of class \code{c("gbpp_<engine>", "gbpp_model")} containing the
+fitted backend model object together with metadata attributes including
+\code{engine}, \code{objective}, \code{n_trees}, \code{baseline}, \code{feature_names}, and
+\code{factor_levels}. Supports \code{\link[=predict.gbpp_model]{predict.gbpp_model()}}, \code{\link[=print.gbpp_model]{print.gbpp_model()}},
+\code{\link[=plot.gbpp_model]{plot.gbpp_model()}}, \code{\link[=explain_gbpp]{explain_gbpp()}}, and \code{\link[=save_gbpp_model]{save_gbpp_model()}}.
 }
 \description{
 Fits a gradient boosting model to spatial point process data on planar
 or linear network domains using point-process specific objectives and
 modern gradient boosting backends (XGBoost, LightGBM, CatBoost).
+}
+\details{
+\code{fit_gbpp()} models the inhomogeneous point process intensity \eqn{\lambda(u)}
+on a planar window \eqn{W} or linear network \eqn{\mathcal{L}} on the log
+scale,
+\deqn{\log \lambda(u) = \eta_0 + F(z(u)), \qquad F(z(u)) = \sum_{k=1}^{K} f_k(z(u)),}
+where \eqn{F(z(u))} is an ensemble of \eqn{K} (\code{n_trees}) regression trees
+evaluated on covariate vector \eqn{z(u) \in \mathbb{R}^p} and fitted via
+Python backends (\code{xgboost}, \code{lightgbm}, or \code{catboost}) using custom first- and
+second-order derivatives (\code{grad}, \code{hess}) derived from quadrature-weighted
+point process estimating equations.
+
+Available objectives correspond to Berman-Turner Poisson likelihood approximations
+(\code{"poisson"}), spatially weighted Poisson composite likelihood (\code{"weighted_poisson"}),
+Baddeley et al. (2014) logistic regression (\code{"logistic"}, \code{"weighted_logistic"}),
+and iteratively reweighted schemes (\code{"iterative_poisson"}, \code{"iterative_logistic"}).
+
+When \code{engine = "lightgbm"} and \code{nrow(data$X) < 20L}, \code{min_data_in_bin},
+\code{min_data_in_leaf}, and \code{min_sum_hessian_in_leaf} are automatically lowered to
+\code{1L}, \code{1L}, and \code{1e-3} respectively (unless already smaller) so small spatial
+fixtures can split leaves cleanly.
+}
+\examples{
+if (requireNamespace("spatstat.random", quietly = TRUE) &&
+    reticulate::py_available() &&
+    reticulate::py_module_available("xgboost")) {
+  win <- spatstat.geom::square(1)
+  pts <- spatstat.random::runifpoint(20, win = win)
+  cov_x <- spatstat.geom::as.im(function(x, y) x, W = win)
+  dat <- prepare_gbpp(pts, covariates = list(x = cov_x), nd = 16L)
+  fit <- fit_gbpp(dat, engine = "xgboost", objective = "poisson", n_trees = 10L)
+  print(fit)
+}
+}
+\references{
+Berman, M., & Turner, T. R. (1992). Approximating point process likelihoods
+with GLIM. \emph{Journal of the Royal Statistical Society: Series C (Applied Statistics)},
+41(1), 31--38. \doi{10.2307/2347614}
+
+Baddeley, A., Coeurjolly, J.-F., Rubak, E., & Waagepetersen, R. (2014).
+Logistic regression for spatial Gibbs point processes. \emph{Biometrika},
+101(2), 377--392. \doi{10.1093/biomet/ast056}
+
+Lu, C., Guan, Y., van Lieshout, M.-C., & Xu, G. (2025). XGBoostPP: Tree-based
+estimation of point process intensity functions. \emph{Journal of Computational and
+Graphical Statistics}, 35(1), 229--240. \doi{10.1080/10618600.2025.2520582}
+
+Choiruddin, A., Tasbihi, N. L., Abbad, M. A., Syukron, M., Widhianingsih,
+T. D. A., & Mateu, J. (2026). XGBoost algorithm for a spatial point process
+intensity estimation based on logistic loss. \emph{Computational Journal of
+Mathematical and Statistical Sciences}, 5(2), 472--496.
+\doi{10.21608/cjmss.2026.452469.1353}
+}
+\seealso{
+\code{\link[=prepare_gbpp]{prepare_gbpp()}}, \code{\link[=prepare_gbpp_network]{prepare_gbpp_network()}}, \code{\link[=predict.gbpp_model]{predict.gbpp_model()}},
+\code{\link[=cv_gbpp]{cv_gbpp()}}, \code{\link[=explain_gbpp]{explain_gbpp()}}, \code{\link[=save_gbpp_model]{save_gbpp_model()}}
 }

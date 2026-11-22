@@ -15,5 +15,25 @@
 Invisibly returns \code{x}.
 }
 \description{
-Print a GBPP fitted model
+Prints a concise summary of a fitted \code{gbpp_model} object, including the
+boosting backend engine, objective, tree count, baseline offset, and feature names.
+}
+\details{
+Displays both scalar baselines (\eqn{\eta_0} and \eqn{\lambda_0 = \exp(\eta_0)})
+and summary statistics when observation-specific baseline vectors are used.
+}
+\examples{
+if (requireNamespace("spatstat.random", quietly = TRUE) &&
+  reticulate::py_available() &&
+  reticulate::py_module_available("xgboost")) {
+  win <- spatstat.geom::square(1)
+  pts <- spatstat.random::runifpoint(20, win = win)
+  cov_x <- spatstat.geom::as.im(function(x, y) x, W = win)
+  dat <- prepare_gbpp(pts, covariates = list(x = cov_x), nd = 16L)
+  fit <- fit_gbpp(dat, engine = "xgboost", objective = "poisson", n_trees = 10L)
+  print(fit)
+}
+}
+\seealso{
+\code{\link[=fit_gbpp]{fit_gbpp()}}, \code{\link[=predict.gbpp_model]{predict.gbpp_model()}}, \code{\link[=explain_gbpp]{explain_gbpp()}}
 }

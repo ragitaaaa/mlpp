@@ -37,7 +37,7 @@ and \code{quadrature_method} is omitted, automatically aligns the quadrature sch
 \code{"logistic"} for logistic objectives and \code{"berman_turner"} for Poisson objectives.}
 
 \item{statistical_weight}{Optional numeric vector of custom statistical weights
-(e.g., from pilot estimation, local LISA statistics, or IPW). Must match the
+(e.g., from pilot intensity estimation or inverse probability weighting). Must match the
 total number of quadrature points.}
 
 \item{interaction_integral}{Optional numeric vector or scalar of spatial interaction
@@ -47,7 +47,10 @@ integrals for iteratively weighted objectives.}
 \code{\link[spatstat.geom:quadscheme.logi]{spatstat.geom::quadscheme.logi()}}.}
 }
 \value{
-A \code{gbpp_data} object with \code{type = "planar"}.
+A \code{gbpp_data} object with \code{type = "planar"}, containing covariate matrix/frame
+\code{X}, binary event/dummy indicator \code{y}, quadrature \code{locations}, \code{quadrature_weight},
+optional \code{dummy_intensity}, optional \code{statistical_weight} and \code{interaction_integral},
+observation \code{window}, and \code{metadata}.
 }
 \description{
 Construct quadrature data for a planar point process and
@@ -55,4 +58,38 @@ evaluate spatial covariates at the quadrature locations. Supports both
 classical Berman-Turner quadrature (with cell counting weights for Poisson
 objectives) and logistic quadrature schemes (with dummy-process intensity
 for logistic objectives).
+}
+\details{
+For \code{"berman_turner"} quadrature, \code{\link[spatstat.geom:quadscheme]{spatstat.geom::quadscheme()}} tiles the window
+with an \verb{nd x nd} dummy grid and assigns Berman-Turner quadrature weights \eqn{v_i}
+whose sum equals the window area \eqn{|W|}. For \code{"logistic"} quadrature,
+\code{\link[spatstat.geom:quadscheme.logi]{spatstat.geom::quadscheme.logi()}} records the dummy-process intensity \eqn{\delta_i}
+(\code{dummy_intensity}) used by the logistic point process estimating equation
+(Baddeley et al., 2014). Factor and character covariates are preserved for native
+handling by downstream gradient boosting engines.
+}
+\examples{
+if (requireNamespace("spatstat.random", quietly = TRUE)) {
+  win <- spatstat.geom::square(1)
+  pts <- spatstat.random::runifpoint(25, win = win)
+  cov_x <- spatstat.geom::as.im(function(x, y) x, W = win)
+  dat <- prepare_gbpp(pts, covariates = list(x = cov_x), nd = 16L)
+  print(dat)
+}
+}
+\references{
+Berman, M., & Turner, T. R. (1992). Approximating point process likelihoods
+with GLIM. \emph{Journal of the Royal Statistical Society: Series C (Applied Statistics)},
+41(1), 31--38. \doi{10.2307/2347614}
+
+Baddeley, A., Coeurjolly, J.-F., Rubak, E., & Waagepetersen, R. (2014).
+Logistic regression for spatial Gibbs point processes. \emph{Biometrika},
+101(2), 377--392. \doi{10.1093/biomet/ast056}
+
+Baddeley, A., Rubak, E., & Turner, R. (2015). \emph{Spatial Point Patterns:
+Methodology and Applications with R}. Chapman and Hall/CRC.
+}
+\seealso{
+\code{\link[=prepare_gbpp_network]{prepare_gbpp_network()}}, \code{\link[=prepare_quad_data]{prepare_quad_data()}}, \code{\link[=new_gbpp_data]{new_gbpp_data()}},
+\code{\link[=fit_gbpp]{fit_gbpp()}}
 }

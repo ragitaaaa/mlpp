@@ -14,4 +14,26 @@ Configures \code{reticulate} to use the Python interpreter specified by
 the \code{GBPP_PYTHON} or \code{RETICULATE_PYTHON} environment variable or,
 when neither is set, auto-discovers a project-local virtual environment (\code{.venv}).
 }
-\keyword{internal}
+\details{
+Resolution precedence order when Python has not yet been initialized in the
+current R session:
+\enumerate{
+\item Explicit \code{GBPP_PYTHON} environment variable.
+\item \code{RETICULATE_PYTHON} environment variable.
+\item Nearest \code{.venv} directory found in the working directory or up to five
+parent directories.
+\item Existing \code{"r-gbpp"} virtualenv or conda environment, or \code{reticulate::py_discover_config()}.
+}
+}
+\examples{
+\dontrun{
+configure_gbpp_python()
+}
+}
+\references{
+Ushey, K., Allaire, J. J., & Tang, Y. (2024). \emph{reticulate: Interface to Python}.
+R package.
+}
+\seealso{
+\code{\link[=check_gbpp_python]{check_gbpp_python()}}, \code{\link[=install_gbpp_python]{install_gbpp_python()}}, \code{\link[=get_gbpp_python]{get_gbpp_python()}}
+}

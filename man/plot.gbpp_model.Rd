@@ -16,25 +16,53 @@
 )
 }
 \arguments{
-\item{x}{A \code{gbpp_model} object.}
+\item{x}{A \code{gbpp_model} object fitted via \code{\link[=fit_gbpp]{fit_gbpp()}}.}
 
-\item{newdata}{A list of spatial covariates (\code{im} or \code{linim}) or a spatial window/network.}
+\item{newdata}{A list of spatial covariates (\code{im} or \code{linim}) or a spatial
+window (\code{owin}) / linear network (\code{linnet}).}
 
 \item{type}{Type of prediction to plot: \code{"intensity"} (default) or \code{"link"}.}
 
-\item{overlay_points}{Logical; if \code{TRUE}, overlays the provided point pattern.}
+\item{overlay_points}{Logical; if \code{TRUE}, overlays \code{pts} on the prediction map.}
 
-\item{pts}{A point pattern (\code{ppp} or \code{lpp}) to overlay if \code{overlay_points = TRUE}.}
+\item{pts}{A point pattern (\code{ppp} or \code{lpp}) to overlay when \code{overlay_points = TRUE}.}
 
-\item{eps}{Spatial resolution.}
+\item{eps}{Spatial resolution (grid spacing or linear network sample spacing).}
 
-\item{dimyx}{Spatial resolution for planar grids.}
+\item{dimyx}{Spatial grid dimensions for planar \code{im} predictions.}
 
-\item{...}{Additional graphical arguments passed to \code{plot.im} or \code{plot.linim}.}
+\item{...}{Additional graphical arguments passed to \code{spatstat.geom::plot.im}
+or \code{spatstat.linnet::plot.linim}.}
 }
 \value{
-Invisibly returns the plotted \code{im} or \code{linim} object.
+Invisibly returns the plotted \code{spatstat.geom::im} or
+\code{spatstat.linnet::linim} object.
 }
 \description{
 Generates a spatial intensity or link scale map using the \code{spatstat} plotting engine.
+}
+\details{
+Internally delegates spatial grid or network mapping to \code{\link[=predict.gbpp_model]{predict.gbpp_model()}}
+with \code{type = "im"} (for planar windows/images) or \code{type = "linim"} (for linear
+networks/network images), then renders the resulting pixel or linear image
+using \code{spatstat} plotting methods.
+}
+\examples{
+if (requireNamespace("spatstat.random", quietly = TRUE) &&
+    reticulate::py_available() &&
+    reticulate::py_module_available("xgboost")) {
+  win <- spatstat.geom::square(1)
+  pts <- spatstat.random::runifpoint(20, win = win)
+  cov_x <- spatstat.geom::as.im(function(x, y) x, W = win)
+  dat <- prepare_gbpp(pts, covariates = list(x = cov_x), nd = 16L)
+  fit <- fit_gbpp(dat, engine = "xgboost", objective = "poisson", n_trees = 10L)
+  pred_im <- plot(fit, newdata = list(x = cov_x), dimyx = c(16, 16))
+}
+}
+\references{
+Baddeley, A., Rubak, E., & Turner, R. (2015). \emph{Spatial Point Patterns:
+Methodology and Applications with R}. Chapman and Hall/CRC.
+}
+\seealso{
+\code{\link[=fit_gbpp]{fit_gbpp()}}, \code{\link[=predict.gbpp_model]{predict.gbpp_model()}}, \code{\link[=explain_gbpp]{explain_gbpp()}}
 }

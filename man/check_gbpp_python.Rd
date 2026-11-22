@@ -7,9 +7,24 @@
 check_gbpp_python()
 }
 \value{
-Invisibly returns a named logical vector of package availability.
+Invisibly returns a named logical vector of package availability
+(\code{TRUE} when importable, \code{FALSE} otherwise).
 }
 \description{
-Verifies that Python is properly configured and inspects the availability
-and versions of required packages (\code{lightgbm}, \code{catboost}, \code{xgboost}, \code{numpy}, \code{scipy}).
+Verifies that Python is properly configured and inspects the availability and
+versions of required packages (\code{lightgbm}, \code{catboost}, \code{xgboost}, \code{numpy},
+\code{scipy}, \code{pandas}).
+}
+\details{
+Calls \code{\link[=configure_gbpp_python]{configure_gbpp_python()}} and prints the active Python executable,
+version, and module availability table.
+}
+\examples{
+if (reticulate::py_available()) {
+  status <- check_gbpp_python()
+  print(status)
+}
+}
+\seealso{
+\code{\link[=configure_gbpp_python]{configure_gbpp_python()}}, \code{\link[=install_gbpp_python]{install_gbpp_python()}}, \code{\link[=get_gbpp_python]{get_gbpp_python()}}
 }

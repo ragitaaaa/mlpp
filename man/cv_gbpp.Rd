@@ -8,10 +8,11 @@ cv_gbpp(
   data,
   engine = c("xgboost", "lightgbm", "catboost"),
   params = list(),
-  nrounds = 100L,
+  n_trees = 100L,
   folds = 5L,
   objective = c("poisson", "weighted_poisson", "logistic", "weighted_logistic",
     "iterative_poisson", "iterative_logistic"),
+  seed = NULL,
   ...
 )
 }
@@ -23,23 +24,78 @@ cv_gbpp(
 
 \item{params}{List of engine-specific hyperparameters. Default is \code{list()}.}
 
-\item{nrounds}{Number of boosting iterations. Default is \code{100L}.}
+\item{n_trees}{Number of boosting trees/iterations passed to \code{\link[=fit_gbpp]{fit_gbpp()}}.
+Default is \code{100L}.}
 
-\item{folds}{Number of independent thinning folds (K). Default is \code{5L}.}
+\item{folds}{Number of independent thinning folds (\eqn{V}). Default is \code{5L}.}
 
 \item{objective}{Point process objective function: \code{"poisson"},
 \code{"weighted_poisson"}, \code{"logistic"}, \code{"weighted_logistic"},
 \code{"iterative_poisson"}, or \code{"iterative_logistic"}. Default is \code{"poisson"}.}
 
+\item{seed}{Optional integer random seed used locally for fold assignment
+without mutating the caller's global \code{.Random.seed}. Default is \code{NULL}.}
+
 \item{...}{Additional arguments passed to the engine fitting function.}
 }
 \value{
-An object of class \code{gbpp_cv} containing \code{metrics} and \code{folds}.
+An object of class \code{"gbpp_cv"} containing:
+\item{metrics}{A named list with \code{loglik_mean}, \code{loglik_sd}, \code{deviance_mean},
+and \code{deviance_sd} computed across the \code{V} held-out thinning folds.}
+\item{folds}{A length-\code{V} list of fold evaluation objects, each containing
+\code{predictions}, \code{y}, \code{w}, \code{weight_sum}, \code{train_weight_sum}, \code{locations},
+\code{window}, \code{loglik}, and \code{deviance}.}
+\item{type}{Character string indicating domain type (\code{"planar"} or \code{"network"}).}
 }
 \description{
 Evaluates spatial point process gradient boosted models using independent
-stochastic thinning. By independently dividing the observed events into K
+stochastic thinning. By independently dividing the observed events into \code{V}
 folds and retaining the full spatial quadrature dummy points in all folds,
 this method produces mathematically exact out-of-sample sub-processes
-without corrupting spatial integrals.
+while recomputing fold quadrature weights so total spatial domain measure
+(\eqn{|W|} or \eqn{|\mathcal{L}|}) is conserved.
+}
+\details{
+Under independent \eqn{V}-fold stochastic thinning (Cronie et al., 2024),
+each observed event (\code{y == 1}) is randomly assigned to one of \eqn{V} folds
+with probability \eqn{1/V}, while all spatial quadrature dummy points (\code{y == 0})
+are retained in every fold. For fold \eqn{v}, the held-out test pattern is the
+thinned sub-process with retention probability \eqn{p_{\mathrm{test}} = 1/V}
+and the training pattern has retention probability
+\eqn{p_{\mathrm{train}} = (V-1)/V}.
+
+Quadrature weights \eqn{v_i} for training and test sub-datasets are recomputed
+cleanly (preserving total window area or linear network length
+\eqn{\sum_i v_i}). The fitted training log-intensity baseline is shifted by
+\eqn{-\log(p_{\mathrm{train}}) = \log(V / (V - 1))} to recover the full
+unthinned intensity \eqn{\hat{\lambda}(u)}, and \code{\link[=calc_poisson_loglik]{calc_poisson_loglik()}} /
+\code{\link[=calc_poisson_deviance]{calc_poisson_deviance()}} scale predicted intensity by \code{p_scale = 1 / V} so
+held-out test metrics are evaluated at the exact theoretical intensity
+\eqn{\hat{\lambda}(u) / V} of a \eqn{1/V}-thinned process. The caller's
+global \code{.Random.seed} is restored on exit when \code{seed} is provided.
+}
+\examples{
+if (requireNamespace("spatstat.random", quietly = TRUE) &&
+  reticulate::py_available() &&
+  reticulate::py_module_available("xgboost")) {
+  win <- spatstat.geom::square(1)
+  pts <- spatstat.random::runifpoint(30, win = win)
+  cov_x <- spatstat.geom::as.im(function(x, y) x, W = win)
+  dat <- prepare_gbpp(pts, covariates = list(x = cov_x), nd = 16L)
+  cv_res <- cv_gbpp(dat, engine = "xgboost", n_trees = 10L, folds = 3L, seed = 42L)
+  print(cv_res)
+}
+}
+\references{
+Cronie, O., Moradi, M., & Biscio, C. A. N. (2024). A cross-validation-based
+statistical theory for point processes. \emph{Biometrika}, 111(2), 625--641.
+\doi{10.1093/biomet/asad041}
+
+Lu, C., Guan, Y., van Lieshout, M.-C., & Xu, G. (2025). XGBoostPP: Tree-based
+estimation of point process intensity functions. \emph{Journal of Computational and
+Graphical Statistics}, 35(1), 229--240. \doi{10.1080/10618600.2025.2520582}
+}
+\seealso{
+\code{\link[=fit_gbpp]{fit_gbpp()}}, \code{\link[=plot.gbpp_cv]{plot.gbpp_cv()}}, \code{\link[=print.gbpp_cv]{print.gbpp_cv()}},
+\code{\link[=calc_poisson_loglik]{calc_poisson_loglik()}}, \code{\link[=calc_poisson_deviance]{calc_poisson_deviance()}}
 }

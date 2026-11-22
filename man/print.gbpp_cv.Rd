@@ -15,5 +15,27 @@
 Invisibly returns \code{x}.
 }
 \description{
-Print Stochastic Thinning Cross-Validation Summary
+Displays the number of folds together with mean +/- standard deviation of
+held-out Poisson deviance and Poisson log-likelihood across folds.
+}
+\details{
+Summarizes \code{x$metrics$deviance_mean}, \code{x$metrics$deviance_sd},
+\code{x$metrics$loglik_mean}, and \code{x$metrics$loglik_sd} produced by \code{\link[=cv_gbpp]{cv_gbpp()}}.
+}
+\examples{
+cv_demo <- structure(
+  list(
+    metrics = list(
+      loglik_mean = -1.2, loglik_sd = 0.1,
+      deviance_mean = 2.4, deviance_sd = 0.2
+    ),
+    folds = list(list(fold = 1L), list(fold = 2L)),
+    type = "planar"
+  ),
+  class = "gbpp_cv"
+)
+print(cv_demo)
+}
+\seealso{
+\code{\link[=cv_gbpp]{cv_gbpp()}}, \code{\link[=plot.gbpp_cv]{plot.gbpp_cv()}}
 }

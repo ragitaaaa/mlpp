@@ -46,3 +46,24 @@ An object of class \code{gbpp_data}.
 Creates an S3 object of class \code{gbpp_data} encapsulating observed points,
 quadrature background dummy points, covariates, weights, and domain metadata.
 }
+\details{
+\code{new_gbpp_data()} is the low-level constructor for \code{"gbpp_data"} objects. Most
+users will call \code{\link[=prepare_gbpp]{prepare_gbpp()}} or \code{\link[=prepare_gbpp_network]{prepare_gbpp_network()}}, or convert an
+existing \code{spatstat} quadrature scheme with \code{\link[=prepare_quad_data]{prepare_quad_data()}}. Objects created
+with \code{new_gbpp_data()} can be verified against a specific boosting objective via
+\code{\link[=validate_gbpp_data]{validate_gbpp_data()}}.
+}
+\examples{
+dat <- new_gbpp_data(
+  X = data.frame(x = c(0.2, 0.8, 0.5)),
+  y = c(1, 0, 0),
+  locations = data.frame(x = c(0.2, 0.8, 0.5), y = c(0.3, 0.7, 0.5)),
+  quadrature_weight = c(0.2, 0.4, 0.4),
+  type = "planar"
+)
+print(dat)
+}
+\seealso{
+\code{\link[=prepare_gbpp]{prepare_gbpp()}}, \code{\link[=prepare_gbpp_network]{prepare_gbpp_network()}}, \code{\link[=validate_gbpp_data]{validate_gbpp_data()}},
+\code{\link[=attach_stat_weight]{attach_stat_weight()}}, \code{\link[=print.gbpp_data]{print.gbpp_data()}}
+}

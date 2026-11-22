@@ -12,7 +12,8 @@
 \item{type}{Type of plot: \code{"importance"} for global mean absolute SHAP barplot, or
 \code{"dependence"} for feature dependence curve. Default is \code{"importance"}.}
 
-\item{feature}{Name of feature to plot when \code{type = "dependence"}. Defaults to the most important feature.}
+\item{feature}{Name of feature to plot when \code{type = "dependence"}. Defaults to
+the most important feature.}
 
 \item{...}{Additional arguments passed to base plotting functions.}
 }
@@ -22,4 +23,25 @@ Invisibly returns \code{x}.
 \description{
 Visualizes feature importance barplots or partial dependence scatter plots
 derived from TreeSHAP values.
+}
+\details{
+When \code{type = "importance"}, draws a horizontal barplot of mean absolute SHAP
+values across all evaluated observations. When \code{type = "dependence"}, plots
+the covariate values for \code{feature} (either continuous scatter or categorical
+boxplots) against their corresponding SHAP contributions on the log-intensity scale.
+}
+\examples{
+exp_demo <- structure(
+  list(
+    shap = matrix(c(0.2, -0.1, 0.05, 0.3), ncol = 2, dimnames = list(NULL, c("x", "y"))),
+    bias = c(-1.0, -1.0),
+    data = data.frame(x = c(0.2, 0.8), y = c(0.4, 0.7))
+  ),
+  class = "gbpp_explanation"
+)
+plot(exp_demo, type = "importance")
+plot(exp_demo, type = "dependence", feature = "x")
+}
+\seealso{
+\code{\link[=explain_gbpp]{explain_gbpp()}}, \code{\link[=print.gbpp_explanation]{print.gbpp_explanation()}}
 }
