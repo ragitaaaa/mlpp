@@ -2,8 +2,7 @@ Package: mlpp
 Title: Machine Learning for Point Processes
 Version: 0.1.0
 Authors@R: c(
-    person("Rendi Andria Gita", "Putra", email = "ragita.dev@gmail.com", role = c("aut", "cre")),
-    person("Achmad", "Choiruddin", email = "choiruddin@its.ac.id", role = "aut")
+    person("Rendi Andria Gita", "Putra", email = "ragita.dev@gmail.com", role = c("aut", "cre"))
   )
 Description: Fits machine learning point process models, currently supporting
     gradient boosted decision trees, to univariate spatial point patterns on

@@ -22,13 +22,14 @@ fit_gbpp(
 )
 }
 \arguments{
-\item{data}{An object of class \code{gbpp_data} constructed via \code{\link[=prepare_gbpp]{prepare_gbpp()}}
-or \code{\link[=prepare_gbpp_network]{prepare_gbpp_network()}}. Supports continuous numeric features as well as
+\item{data}{An object of class \code{mlpp_data} constructed via \code{\link[=prepare_mlpp]{prepare_mlpp()}}
+or \code{\link[=mlpp_data]{mlpp_data()}}. Supports continuous numeric features as well as
 factor or character categorical covariates across all three engines.}
 
-\item{engine}{Boosting backend engine: \code{"xgboost"}, \code{"lightgbm"}, or \code{"catboost"}.}
+\item{engine}{Boosting backend engine: \code{"xgboost"} (default), \code{"lightgbm"},
+or \code{"catboost"}.}
 
-\item{objective}{Point process objective function: \code{"poisson"},
+\item{objective}{Point process objective function: \code{"poisson"} (default),
 \code{"weighted_poisson"}, \code{"logistic"}, \code{"weighted_logistic"},
 \code{"iterative_poisson"}, or \code{"iterative_logistic"}.}
 
@@ -54,16 +55,20 @@ denotes the quadrature weights) for \code{"poisson"}, \code{"weighted_poisson"},
 \code{"weighted_logistic"}, and \code{"iterative_logistic"}.}
 
 \item{params}{Named list of backend-specific parameters to override or
-supplement defaults.}
+supplement defaults. Common hyperparameter aliases (e.g., \code{learning_rate},
+\code{max_depth}, \code{subsample}, \code{colsample_bytree}, \code{random_seed}) are mapped
+to each backend automatically.}
 
 \item{...}{Additional arguments passed to the backend fit call.}
 }
 \value{
-An S3 object of class \code{c("gbpp_<engine>", "gbpp_model")} containing the
-fitted backend model object together with metadata attributes including
-\code{engine}, \code{objective}, \code{n_trees}, \code{baseline}, \code{feature_names}, and
-\code{factor_levels}. Supports \code{\link[=predict.gbpp_model]{predict.gbpp_model()}}, \code{\link[=print.gbpp_model]{print.gbpp_model()}},
-\code{\link[=plot.gbpp_model]{plot.gbpp_model()}}, \code{\link[=explain_gbpp]{explain_gbpp()}}, and \code{\link[=save_gbpp_model]{save_gbpp_model()}}.
+An S3 object inheriting from \code{c("gbpp_<engine>", "gbpp_model", "mlpp_model")}
+wrapping the fitted Python booster together with metadata attributes
+\code{engine}, \code{objective}, \code{baseline}, \code{feature_names}, \code{factor_levels}, \code{params},
+\code{n_trees}, \code{serialized_model}, \code{serialized_format}, \code{data_info} (and
+\code{cat_features} for CatBoost). Supports \code{\link[=predict.mlpp_model]{predict.mlpp_model()}},
+\code{\link[=print.mlpp_model]{print.mlpp_model()}}, \code{\link[=plot.mlpp_model]{plot.mlpp_model()}}, \code{\link[=eval_mlpp]{eval_mlpp()}}, \code{\link[=explain_mlpp]{explain_mlpp()}},
+and \code{\link[=save_mlpp]{save_mlpp()}}.
 }
 \description{
 Fits a gradient boosting model to spatial point process data on planar
@@ -86,10 +91,19 @@ Available objectives correspond to Berman-Turner Poisson likelihood approximatio
 Baddeley et al. (2014) logistic regression (\code{"logistic"}, \code{"weighted_logistic"}),
 and iteratively reweighted schemes (\code{"iterative_poisson"}, \code{"iterative_logistic"}).
 
-When \code{engine = "lightgbm"} and \code{nrow(data$X) < 20L}, \code{min_data_in_bin},
-\code{min_data_in_leaf}, and \code{min_sum_hessian_in_leaf} are automatically lowered to
-\code{1L}, \code{1L}, and \code{1e-3} respectively (unless already smaller) so small spatial
-fixtures can split leaves cleanly.
+Categorical covariates are encoded natively via Ordered Target Statistics
+(\code{cat_features}) in CatBoost and as consistent training-level integer codes in
+XGBoost and LightGBM. When \code{engine = "lightgbm"} and \code{nrow(data$X) < 20L},
+\code{min_data_in_bin}, \code{min_data_in_leaf}, and \code{min_sum_hessian_in_leaf} are
+automatically lowered to \code{1L}, \code{1L}, and \code{1e-3} respectively (unless already
+smaller) so small spatial fixtures can split leaves cleanly.
+
+In CatBoost (\code{engine = "catboost"}), stateless objectives (\code{"poisson"},
+\code{"weighted_poisson"}, \code{"logistic"}, \code{"weighted_logistic"}) support \code{Ordered}
+boosting, \code{Bernoulli} subsampling, and multi-threading, whereas stateful
+iterative objectives (\code{"iterative_poisson"}, \code{"iterative_logistic"}) require
+full-batch \code{boosting_type = "Plain"} (\code{has_time = TRUE}, \code{thread_count = 1L},
+\code{subsample = 1.0}).
 }
 \examples{
 if (requireNamespace("spatstat.random", quietly = TRUE) &&
@@ -98,7 +112,7 @@ if (requireNamespace("spatstat.random", quietly = TRUE) &&
   win <- spatstat.geom::square(1)
   pts <- spatstat.random::runifpoint(20, win = win)
   cov_x <- spatstat.geom::as.im(function(x, y) x, W = win)
-  dat <- prepare_gbpp(pts, covariates = list(x = cov_x), nd = 16L)
+  dat <- prepare_mlpp(pts, covariates = list(x = cov_x), nd = 16L)
   fit <- fit_gbpp(dat, engine = "xgboost", objective = "poisson", n_trees = 10L)
   print(fit)
 }
@@ -108,9 +122,26 @@ Berman, M., & Turner, T. R. (1992). Approximating point process likelihoods
 with GLIM. \emph{Journal of the Royal Statistical Society: Series C (Applied Statistics)},
 41(1), 31--38. \doi{10.2307/2347614}
 
+Guan, Y., & Shen, Y. (2010). A weighted estimating equation approach for
+inhomogeneous spatial point processes. \emph{Biometrika}, 97(4), 867--880.
+\doi{10.1093/biomet/asq047}
+
 Baddeley, A., Coeurjolly, J.-F., Rubak, E., & Waagepetersen, R. (2014).
 Logistic regression for spatial Gibbs point processes. \emph{Biometrika},
 101(2), 377--392. \doi{10.1093/biomet/ast056}
+
+Chen, T., & Guestrin, C. (2016). XGBoost: A scalable tree boosting system.
+\emph{Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge
+Discovery and Data Mining}, 785--794. \doi{10.1145/2939672.2939785}
+
+Ke, G., Meng, Q., Finley, T., Wang, T., Chen, W., Ma, W., Ye, Q., & Liu,
+T.-Y. (2017). LightGBM: A highly efficient gradient boosting decision tree.
+\emph{Advances in Neural Information Processing Systems}, 30, 3146--3154.
+
+Prokhorenkova, L., Gusev, G., Vorobev, A., Dorogush, A. V., & Gulin, A.
+(2018). CatBoost: Unbiased boosting with categorical features. \emph{Advances in
+Neural Information Processing Systems}, 31, 6638--6648.
+\doi{10.48550/arXiv.1706.09516}
 
 Lu, C., Guan, Y., van Lieshout, M.-C., & Xu, G. (2025). XGBoostPP: Tree-based
 estimation of point process intensity functions. \emph{Journal of Computational and
@@ -123,6 +154,6 @@ Mathematical and Statistical Sciences}, 5(2), 472--496.
 \doi{10.21608/cjmss.2026.452469.1353}
 }
 \seealso{
-\code{\link[=prepare_gbpp]{prepare_gbpp()}}, \code{\link[=prepare_gbpp_network]{prepare_gbpp_network()}}, \code{\link[=predict.gbpp_model]{predict.gbpp_model()}},
-\code{\link[=cv_gbpp]{cv_gbpp()}}, \code{\link[=explain_gbpp]{explain_gbpp()}}, \code{\link[=save_gbpp_model]{save_gbpp_model()}}
+\code{\link[=prepare_mlpp]{prepare_mlpp()}}, \code{\link[=mlpp_data]{mlpp_data()}}, \code{\link[=predict.mlpp_model]{predict.mlpp_model()}},
+\code{\link[=eval_mlpp]{eval_mlpp()}}, \code{\link[=cv_mlpp]{cv_mlpp()}}, \code{\link[=explain_mlpp]{explain_mlpp()}}, \code{\link[=save_mlpp]{save_mlpp()}}
 }

@@ -15,22 +15,41 @@ and interaction diagnostics with Python boosting backends (\code{xgboost}, \code
 \details{
 Main entry points in the package workflow:
 \itemize{
-\item \strong{Data preparation}: \code{\link[=prepare_gbpp]{prepare_gbpp()}}, \code{\link[=prepare_gbpp_network]{prepare_gbpp_network()}}, \code{\link[=prepare_quad_data]{prepare_quad_data()}},
-\code{\link[=new_gbpp_data]{new_gbpp_data()}}, \code{\link[=validate_gbpp_data]{validate_gbpp_data()}}.
-\item \strong{Interaction & iterative weights}: \code{\link[=est_interaction]{est_interaction()}}, \code{\link[=est_net_interaction]{est_net_interaction()}},
-\code{\link[=attach_interaction]{attach_interaction()}}, \code{\link[=attach_net_interaction]{attach_net_interaction()}}, \code{\link[=attach_stat_weight]{attach_stat_weight()}},
-\code{\link[=calc_iter_poisson_weight]{calc_iter_poisson_weight()}}, \code{\link[=calc_iter_logistic_weight]{calc_iter_logistic_weight()}}.
-\item \strong{Model fitting & prediction}: \code{\link[=fit_gbpp]{fit_gbpp()}}, \code{\link[=predict.gbpp_model]{predict.gbpp_model()}}, \code{\link[=plot.gbpp_model]{plot.gbpp_model()}},
-\code{\link[=save_gbpp_model]{save_gbpp_model()}}, \code{\link[=load_gbpp_model]{load_gbpp_model()}}.
-\item \strong{Diagnostics & cross-validation}: \code{\link[=cv_gbpp]{cv_gbpp()}}, \code{\link[=explain_gbpp]{explain_gbpp()}},
-\code{\link[=calc_poisson_loglik]{calc_poisson_loglik()}}, \code{\link[=calc_poisson_deviance]{calc_poisson_deviance()}}.
-\item \strong{Python backend setup}: \code{\link[=configure_gbpp_python]{configure_gbpp_python()}}, \code{\link[=install_gbpp_python]{install_gbpp_python()}},
-\code{\link[=check_gbpp_python]{check_gbpp_python()}}, \code{\link[=get_gbpp_python]{get_gbpp_python()}}.
+\item \strong{Data preparation}: \code{\link[=prepare_mlpp]{prepare_mlpp()}}, \code{\link[=mlpp_data]{mlpp_data()}}.
+\item \strong{Weights & interaction}: \code{\link[=attach_weights]{attach_weights()}}, \code{\link[=attach_interaction]{attach_interaction()}}.
+\item \strong{Model fitting & prediction}: \code{\link[=fit_gbpp]{fit_gbpp()}}, \code{\link[=predict.mlpp_model]{predict.mlpp_model()}},
+\code{\link[=plot.mlpp_model]{plot.mlpp_model()}}, \code{\link[=save_mlpp]{save_mlpp()}}, \code{\link[=load_mlpp]{load_mlpp()}}.
+\item \strong{Evaluation, cross-validation & explainability}: \code{\link[=eval_mlpp]{eval_mlpp()}}, \code{\link[=cv_mlpp]{cv_mlpp()}},
+\code{\link[=explain_mlpp]{explain_mlpp()}}.
+\item \strong{Python backend setup}: \code{\link[=install_mlpp_python]{install_mlpp_python()}}, \code{\link[=check_mlpp_python]{check_mlpp_python()}}.
 }
 }
 \references{
 Baddeley, A., Rubak, E., & Turner, R. (2015). \emph{Spatial Point Patterns:
 Methodology and Applications with R}. Chapman and Hall/CRC.
+
+Chen, T., & Guestrin, C. (2016). XGBoost: A scalable tree boosting system.
+\emph{Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge
+Discovery and Data Mining}, 785--794. \doi{10.1145/2939672.2939785}
+
+Ke, G., Meng, Q., Finley, T., Wang, T., Chen, W., Ma, W., Ye, Q., & Liu,
+T.-Y. (2017). LightGBM: A highly efficient gradient boosting decision tree.
+\emph{Advances in Neural Information Processing Systems}, 30, 3146--3154.
+
+Prokhorenkova, L., Gusev, G., Vorobev, A., Dorogush, A. V., & Gulin, A.
+(2018). CatBoost: Unbiased boosting with categorical features. \emph{Advances in
+Neural Information Processing Systems}, 31, 6638--6648.
+\doi{10.48550/arXiv.1706.09516}
+
+Lundberg, S. M., Erion, G., Chen, H., DeGrave, A., Prutkin, J. M., Nair, B.,
+Katz, R., Himmelfarb, J., Bansal, N., & Lee, S.-I. (2020).
+From local explanations to global understanding with explainable AI for trees.
+\emph{Nature Machine Intelligence}, 2(1), 56--67.
+\doi{10.1038/s42256-019-0138-9}
+
+Cronie, O., Moradi, M., & Biscio, C. A. N. (2024). A cross-validation-based
+statistical theory for point processes. \emph{Biometrika}, 111(2), 625--641.
+\doi{10.1093/biomet/asad041}
 
 Lu, C., Guan, Y., van Lieshout, M.-C., & Xu, G. (2025). XGBoostPP: Tree-based
 estimation of point process intensity functions. \emph{Journal of Computational and
@@ -43,8 +62,8 @@ Mathematical and Statistical Sciences}, 5(2), 472--496.
 \doi{10.21608/cjmss.2026.452469.1353}
 }
 \seealso{
-\code{\link[=prepare_gbpp]{prepare_gbpp()}}, \code{\link[=prepare_gbpp_network]{prepare_gbpp_network()}}, \code{\link[=fit_gbpp]{fit_gbpp()}},
-\code{\link[=cv_gbpp]{cv_gbpp()}}, \code{\link[=explain_gbpp]{explain_gbpp()}}
+\code{\link[=prepare_mlpp]{prepare_mlpp()}}, \code{\link[=mlpp_data]{mlpp_data()}}, \code{\link[=fit_gbpp]{fit_gbpp()}}, \code{\link[=cv_mlpp]{cv_mlpp()}},
+\code{\link[=explain_mlpp]{explain_mlpp()}}
 }
 \author{
 \strong{Maintainer}: Rendi Andria Gita Putra \email{ragita.dev@gmail.com}
@@ -52,7 +71,6 @@ Mathematical and Statistical Sciences}, 5(2), 472--496.
 Authors:
 \itemize{
   \item Rendi Andria Gita Putra \email{ragita.dev@gmail.com}
-  \item Achmad Choiruddin \email{choiruddin@its.ac.id}
 }
 
 }
