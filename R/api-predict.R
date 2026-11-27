@@ -1,14 +1,15 @@
 # ============================================================
-# GBPP - Unified Prediction & Print Methods
+# mlpp - Unified Prediction, Spatial Mapping & Print Methods
 # ============================================================
 
-#' Predict from a Fitted GBPP Model
+#' Predict from a Fitted mlpp Model
 #'
-#' Evaluates the fitted gradient boosted point process model on new covariate data,
-#' returning the estimated log-intensity (link), spatial intensity, raw boosting tree margin,
-#' or continuous spatial pixel images on planar or linear network domains.
+#' Evaluates a fitted point process model on new covariate data, returning the
+#' estimated log-intensity (link), spatial intensity, raw model margin, or
+#' continuous spatial pixel images on planar (`im`) or linear network (`linim`)
+#' domains.
 #'
-#' @param object A fitted model of class `gbpp_model`.
+#' @param object A fitted model of class `mlpp_model`.
 #' @param newdata Predictor covariates. Can be:
 #'   - A `data.frame` or numeric `matrix` of covariate values evaluated at
 #'     specific locations (for `type` in `"link"`, `"intensity"`, `"raw"`).
@@ -23,27 +24,30 @@
 #'   - `"raw"`: The raw ensemble contribution
 #'     \eqn{\hat{F}(z(u)) = \sum_{k=1}^{K} f_k(z(u))} without baseline offset
 #'     \eqn{\eta_0}.
-#'   - `"im"`: A continuous 2D pixel image (`spatstat.geom::im`) of spatial
-#'     intensity across a planar window.
+#'   - `"im"`: A continuous 2D pixel image (`spatstat.geom::im`) across a planar
+#'     window (supports `scale = c("intensity", "link")`, `eps`, and `dimyx` via `...`).
 #'   - `"linim"`: A continuous linear network pixel image
-#'     (`spatstat.linnet::linim`) of spatial intensity across a network.
-#' @param ... Additional arguments passed to the underlying engine prediction method
-#'   (e.g., `eps` or `dimyx` when `type = "im"` or `type = "linim"`).
+#'     (`spatstat.linnet::linim`) across a network (supports
+#'     `scale = c("intensity", "link")` and `eps` via `...`).
+#' @param ... Additional arguments passed to spatial rasterizers (`eps`, `dimyx`,
+#'   `scale = c("intensity", "link")` when `type` is `"im"` or `"linim"`) or to
+#'   the underlying engine `predict()` method.
 #'
 #' @details
 #' Given fitted tree predictions \eqn{\hat{F}(z(u)) = \sum_{k=1}^{K} f_k(z(u))}
-#' and baseline offset \eqn{\eta_0}, `predict.gbpp_model()` returns:
+#' and baseline offset \eqn{\eta_0}, `predict.mlpp_model()` returns:
 #' - `"link"`: \eqn{\hat{\eta}(u) = \eta_0 + \hat{F}(z(u))};
-#' - `"intensity"`: \eqn{\hat{\lambda}(u) = \exp(\hat{\eta}(u))}, clamped safely on the
-#'   link scale to avoid floating-point overflow;
+#' - `"intensity"`: \eqn{\hat{\lambda}(u) = \exp(\hat{\eta}(u))}, clamped to
+#'   `[-50, 50]` on the link scale to avoid floating-point overflow;
 #' - `"raw"`: \eqn{\hat{F}(z(u))} without the baseline offset;
 #' - `"im"` / `"linim"`: spatially mapped predictions on planar pixel grids or
-#'   linear network pixel grids.
+#'   linear network pixel grids (`scale = "intensity"` by default, or `"link"`).
 #'
 #' Categorical columns are aligned automatically against the factor levels recorded
-#' at training time (`attr(object, "factor_levels")`). Engine-specific methods
-#' `predict.gbpp_xgboost()`, `predict.gbpp_lightgbm()`, and `predict.gbpp_catboost()`
-#' delegate to `predict.gbpp_model()`.
+#' at training time (`attr(object, "factor_levels")`), raising an error on unseen
+#' levels. Models fitted with an observation-specific vector `baseline` require
+#' `nrow(newdata) == length(baseline)` for `type` in `"link"`, `"intensity"`,
+#' `"im"`, or `"linim"` (use `type = "raw"` for arbitrary subsets).
 #'
 #' @return A numeric vector of predictions (for `type` in `"link"`, `"intensity"`, `"raw"`),
 #'   an object of class `spatstat.geom::im` (for `type = "im"`), or an object of class
@@ -63,7 +67,7 @@
 #' Mathematical and Statistical Sciences*, 5(2), 472--496.
 #' \doi{10.21608/cjmss.2026.452469.1353}
 #'
-#' @seealso [fit_gbpp()], [plot.gbpp_model()], [explain_gbpp()]
+#' @seealso [fit_gbpp()], [plot.mlpp_model()], [eval_mlpp()], [explain_mlpp()]
 #'
 #' @examples
 #' if (requireNamespace("spatstat.random", quietly = TRUE) &&
@@ -72,13 +76,13 @@
 #'   win <- spatstat.geom::square(1)
 #'   pts <- spatstat.random::runifpoint(20, win = win)
 #'   cov_x <- spatstat.geom::as.im(function(x, y) x, W = win)
-#'   dat <- prepare_gbpp(pts, covariates = list(x = cov_x), nd = 16L)
+#'   dat <- prepare_mlpp(pts, covariates = list(x = cov_x), nd = 16L)
 #'   fit <- fit_gbpp(dat, engine = "xgboost", objective = "poisson", n_trees = 10L)
 #'   head(predict(fit, newdata = dat$X, type = "intensity"))
 #'   lam_im <- predict(fit, newdata = list(x = cov_x), type = "im", dimyx = c(16, 16))
 #' }
 #' @export
-predict.gbpp_model <- function(
+predict.mlpp_model <- function(
   object,
   newdata,
   type = c("link", "intensity", "raw", "im", "linim"),
@@ -87,10 +91,14 @@ predict.gbpp_model <- function(
   type <- match.arg(type)
 
   if (type == "im") {
-    return(.gbpp_predict_im(object, newdata, ...))
+    return(.pred_im(object, newdata, ...))
   }
   if (type == "linim") {
-    return(.gbpp_predict_linim(object, newdata, ...))
+    return(.pred_linim(object, newdata, ...))
+  }
+
+  if (!inherits(object, "mlpp_model")) {
+    stop("`object` must be an `mlpp_model` object.", call. = FALSE)
   }
 
   if (missing(newdata) || is.null(newdata)) {
@@ -101,37 +109,26 @@ predict.gbpp_model <- function(
     stop("`newdata` must be a numeric matrix or data frame.", call. = FALSE)
   }
 
-  if (inherits(object, "python.builtin.object")) {
-    object <- .gbpp_rehydrate_model(object)
-    raw_model <- object
-    baseline <- attr(object, "baseline")
-    baseline <- if (!is.null(baseline)) as.numeric(baseline) else 0.0
-    engine <- attr(object, "engine")
-    feature_names <- attr(object, "feature_names")
-    factor_levels <- attr(object, "factor_levels")
-    if (is.null(engine)) {
-      engine <- if (inherits(object, "gbpp_xgboost")) {
-        "xgboost"
-      } else if (inherits(object, "gbpp_lightgbm")) {
-        "lightgbm"
-      } else if (inherits(object, "gbpp_catboost")) {
-        "catboost"
-      } else {
-        stop("Unknown GBPP model engine.", call. = FALSE)
-      }
+  object <- .unpack_model(object)
+  raw_model <- object
+  baseline <- attr(object, "baseline")
+  baseline <- if (!is.null(baseline)) as.numeric(baseline) else 0.0
+  engine <- attr(object, "engine")
+  feature_names <- attr(object, "feature_names")
+  factor_levels <- attr(object, "factor_levels")
+  if (is.null(engine)) {
+    engine <- if (inherits(object, "gbpp_xgboost")) {
+      "xgboost"
+    } else if (inherits(object, "gbpp_lightgbm")) {
+      "lightgbm"
+    } else if (inherits(object, "gbpp_catboost")) {
+      "catboost"
+    } else {
+      stop("Unknown mlpp model engine.", call. = FALSE)
     }
-  } else if (is.list(object) && !is.null(object$raw_model)) {
-    raw_model <- .gbpp_rehydrate_model(object$raw_model)
-    baseline <- if (!is.null(object$baseline)) as.numeric(object$baseline) else 0.0
-    engine <- object$engine
-    feature_names <- object$feature_names
-    factor_levels <- object$factor_levels
-  } else {
-    stop("Invalid `gbpp_model` object.", call. = FALSE)
   }
 
-  # Standardize column schema, column ordering, and factor levels
-  encoded <- .gbpp_encode_features(
+  encoded <- .encode_X(
     X = newdata,
     factor_levels = factor_levels,
     feature_names = feature_names,
@@ -139,10 +136,9 @@ predict.gbpp_model <- function(
     unseen = "error"
   )
 
-  # Engine-specific raw prediction
   raw_pred <- switch(engine,
     xgboost = {
-      configure_gbpp_python()
+      .init_python()
       mat <- as.matrix(encoded)
       if (!is.numeric(mat) || any(!is.finite(mat))) {
         stop("`newdata` must contain finite numeric values.", call. = FALSE)
@@ -173,7 +169,7 @@ predict.gbpp_model <- function(
       as.numeric(reticulate::py_to_r(pred))
     },
     lightgbm = {
-      configure_gbpp_python()
+      .init_python()
       mat <- as.matrix(encoded)
       if (!is.numeric(mat) || any(!is.finite(mat))) {
         stop("`newdata` must contain finite numeric values.", call. = FALSE)
@@ -183,7 +179,7 @@ predict.gbpp_model <- function(
       as.numeric(reticulate::py_to_r(pred))
     },
     catboost = {
-      configure_gbpp_python()
+      .init_python()
       cat_cols <- which(vapply(encoded, function(z) is.factor(z) || is.character(z), logical(1)))
       num_cols <- which(vapply(encoded, is.numeric, logical(1)))
 
@@ -215,7 +211,6 @@ predict.gbpp_model <- function(
     )
   }
 
-  # Apply baseline and link transformation
   switch(type,
     raw = raw_pred,
     link = baseline + raw_pred,
@@ -223,30 +218,12 @@ predict.gbpp_model <- function(
   )
 }
 
-#' @rdname predict.gbpp_model
-#' @export
-predict.gbpp_xgboost <- function(object, newdata, ...) {
-  predict.gbpp_model(object = object, newdata = newdata, ...)
-}
-
-#' @rdname predict.gbpp_model
-#' @export
-predict.gbpp_lightgbm <- function(object, newdata, ...) {
-  predict.gbpp_model(object = object, newdata = newdata, ...)
-}
-
-#' @rdname predict.gbpp_model
-#' @export
-predict.gbpp_catboost <- function(object, newdata, ...) {
-  predict.gbpp_model(object = object, newdata = newdata, ...)
-}
-
-#' Print a GBPP fitted model
+#' Print a fitted mlpp model
 #'
-#' Prints a concise summary of a fitted `gbpp_model` object, including the
-#' boosting backend engine, objective, tree count, baseline offset, and feature names.
+#' Prints a concise summary of a fitted `mlpp_model` object, including the
+#' engine, objective, tree count, baseline offset, and feature names.
 #'
-#' @param x A `gbpp_model` object.
+#' @param x An `mlpp_model` object.
 #' @param ... Additional arguments (currently unused).
 #'
 #' @details
@@ -255,7 +232,7 @@ predict.gbpp_catboost <- function(object, newdata, ...) {
 #'
 #' @return Invisibly returns `x`.
 #'
-#' @seealso [fit_gbpp()], [predict.gbpp_model()], [explain_gbpp()]
+#' @seealso [fit_gbpp()], [predict.mlpp_model()], [explain_mlpp()]
 #'
 #' @examples
 #' if (requireNamespace("spatstat.random", quietly = TRUE) &&
@@ -264,15 +241,16 @@ predict.gbpp_catboost <- function(object, newdata, ...) {
 #'   win <- spatstat.geom::square(1)
 #'   pts <- spatstat.random::runifpoint(20, win = win)
 #'   cov_x <- spatstat.geom::as.im(function(x, y) x, W = win)
-#'   dat <- prepare_gbpp(pts, covariates = list(x = cov_x), nd = 16L)
+#'   dat <- prepare_mlpp(pts, covariates = list(x = cov_x), nd = 16L)
 #'   fit <- fit_gbpp(dat, engine = "xgboost", objective = "poisson", n_trees = 10L)
 #'   print(fit)
 #' }
+#' @keywords internal
 #' @export
-print.gbpp_model <- function(x, ...) {
+print.mlpp_model <- function(x, ...) {
   bl <- attr(x, "baseline")
-  cat("Gradient Boosted Point Process Model\n")
-  cat("------------------------------------\n")
+  cat("MLPP Fitted Point Process Model\n")
+  cat("-------------------------------\n")
   cat("Engine          :", attr(x, "engine"), "\n")
   cat("Objective       :", attr(x, "objective"), "\n")
   cat("Number of trees :", attr(x, "n_trees"), "\n")
@@ -291,4 +269,235 @@ print.gbpp_model <- function(x, ...) {
     cat("Feature names   :", paste(attr(x, "feature_names"), collapse = ", "), "\n")
   }
   invisible(x)
+}
+
+#' Map mlpp predictions to a planar spatstat pixel image (`im`)
+#'
+#' @keywords internal
+#' @noRd
+.pred_im <- function(
+  object,
+  newdata,
+  eps = NULL,
+  dimyx = NULL,
+  scale = c("intensity", "link"),
+  ...
+) {
+  scale <- match.arg(scale)
+
+  if (missing(newdata) || is.null(newdata)) {
+    stop(
+      "`newdata` must be a list of `spatstat.geom::im` objects or an `owin` window.",
+      call. = FALSE
+    )
+  }
+
+  if (inherits(newdata, "owin")) {
+    window <- newdata
+    covariates <- list()
+  } else if (is.list(newdata) &&
+    length(newdata) > 0 &&
+    all(vapply(newdata, inherits, logical(1), "im"))) {
+    window <- spatstat.geom::Window(newdata[[1]])
+    covariates <- newdata
+    disjoint <- vapply(
+      covariates,
+      function(z) {
+        inter <- spatstat.geom::intersect.owin(window, spatstat.geom::Window(z), fatal = FALSE)
+        is.null(inter) || spatstat.geom::is.empty(inter) || spatstat.geom::area(inter) <= 0
+      },
+      logical(1)
+    )
+    if (any(disjoint)) {
+      stop("All `im` covariates in `newdata` must overlap a common spatial window.", call. = FALSE)
+    }
+  } else {
+    stop(
+      "`newdata` for type = 'im' must be a list of `im` objects or an `owin` window.",
+      call. = FALSE
+    )
+  }
+
+  feature_names <- attr(object, "feature_names")
+
+  if (length(feature_names) > 0) {
+    required_covs <- setdiff(feature_names, c("x", "y"))
+    if (length(required_covs) > 0 && !all(required_covs %in% names(covariates))) {
+      missing_covs <- setdiff(required_covs, names(covariates))
+      stop(
+        sprintf(
+          "Missing required covariates in `newdata`: %s",
+          paste(missing_covs, collapse = ", ")
+        ),
+        call. = FALSE
+      )
+    }
+  }
+
+  mask <- spatstat.geom::as.mask(window, eps = eps, dimyx = dimyx)
+  coords <- spatstat.geom::raster.xy(mask, drop = FALSE)
+  n_pts <- length(coords$x)
+
+  df <- if (length(feature_names) > 0L) {
+    cols_list <- vector("list", length(feature_names))
+    names(cols_list) <- feature_names
+    for (f in feature_names) {
+      if (f %in% names(covariates)) {
+        v_extracted <- covariates[[f]][list(x = coords$x, y = coords$y)]
+        if (is.factor(v_extracted) || is.character(v_extracted)) {
+          cols_list[[f]] <- as.character(v_extracted)
+        } else {
+          cols_list[[f]] <- as.numeric(v_extracted)
+        }
+      } else if (f == "x") {
+        cols_list[[f]] <- as.numeric(coords$x)
+      } else if (f == "y") {
+        cols_list[[f]] <- as.numeric(coords$y)
+      }
+    }
+    as.data.frame(cols_list, stringsAsFactors = FALSE, check.names = FALSE)
+  } else {
+    data.frame(x = as.numeric(coords$x), y = as.numeric(coords$y))[seq_len(n_pts), 0, drop = FALSE]
+  }
+
+  inside <- as.vector(mask$m)
+  valid_covariates <- stats::complete.cases(df)
+  valid <- inside & valid_covariates
+
+  out_mat <- matrix(NA_real_, nrow = mask$dim[1], ncol = mask$dim[2])
+
+  if (any(valid)) {
+    df_valid <- df[valid, feature_names, drop = FALSE]
+    preds <- predict.mlpp_model(object, newdata = df_valid, type = scale, ...)
+    out_mat[valid] <- preds
+  }
+
+  spatstat.geom::im(out_mat, xcol = mask$xcol, yrow = mask$yrow)
+}
+
+#' Map mlpp predictions to a linear-network spatstat pixel image (`linim`)
+#'
+#' @keywords internal
+#' @noRd
+.pred_linim <- function(
+  object,
+  newdata,
+  eps = NULL,
+  dimyx = NULL,
+  scale = c("intensity", "link"),
+  ...
+) {
+  scale <- match.arg(scale)
+
+  if (missing(newdata) || is.null(newdata)) {
+    stop(
+      "`newdata` must be a list of `spatstat.linnet::linim` objects or a ",
+      "`linnet` object.",
+      call. = FALSE
+    )
+  }
+
+  if (inherits(newdata, "linnet")) {
+    network <- newdata
+    covariates <- list()
+  } else if (is.list(newdata) && length(newdata) > 0 &&
+    all(vapply(newdata, function(x) inherits(x, c("linim", "linfun")), logical(1)))) {
+    network <- spatstat.linnet::as.linnet(newdata[[1]])
+    .check_linnet(
+      newdata,
+      network,
+      "All network covariates in `newdata` must be defined on the same linear network."
+    )
+    covariates <- newdata
+  } else {
+    stop(
+      "`newdata` for type = 'linim' must be a list of `linim` objects, ",
+      "`linfun` objects, or a `linnet` object.",
+      call. = FALSE
+    )
+  }
+
+  feature_names <- attr(object, "feature_names")
+
+  if (length(feature_names) > 0) {
+    required_covs <- setdiff(feature_names, c("x", "y"))
+    if (length(required_covs) > 0 && !all(required_covs %in% names(covariates))) {
+      missing_covs <- setdiff(required_covs, names(covariates))
+      stop(
+        sprintf(
+          "Missing required covariates in `newdata`: %s",
+          paste(missing_covs, collapse = ", ")
+        ),
+        call. = FALSE
+      )
+    }
+  }
+
+  f_predict <- function(x, y, seg, tp) {
+    n_pts <- length(x)
+    x_num <- as.numeric(x)
+    y_num <- as.numeric(y)
+
+    needs_lpp <- any(vapply(
+      intersect(feature_names, names(covariates)),
+      function(nm) !inherits(covariates[[nm]], "linfun"),
+      logical(1)
+    ))
+
+    p_lpp <- NULL
+    if (needs_lpp) {
+      p_lpp <- tryCatch(
+        spatstat.linnet::lpp(
+          data.frame(x = x_num, y = y_num, seg = as.integer(seg), tp = as.numeric(tp)),
+          L = network,
+          check = FALSE
+        ),
+        error = function(e) {
+          spatstat.linnet::as.lpp(
+            x = x_num, y = y_num, seg = as.integer(seg), tp = as.numeric(tp),
+            L = network
+          )
+        }
+      )
+    }
+
+    cols_list <- vector("list", length(feature_names))
+    names(cols_list) <- feature_names
+
+    for (f in feature_names) {
+      if (f %in% names(covariates)) {
+        cov_obj <- covariates[[f]]
+        v_raw <- if (inherits(cov_obj, "linfun")) {
+          cov_obj(x_num, y_num, seg, tp)
+        } else {
+          cov_obj[p_lpp]
+        }
+        if (length(v_raw) != n_pts) {
+          stop("Network covariate evaluation length mismatch for `", f, "`.", call. = FALSE)
+        }
+        if (is.factor(v_raw) || is.character(v_raw)) {
+          cols_list[[f]] <- as.character(v_raw)
+        } else {
+          cols_list[[f]] <- as.numeric(v_raw)
+        }
+      } else if (f == "x") {
+        cols_list[[f]] <- x_num
+      } else if (f == "y") {
+        cols_list[[f]] <- y_num
+      }
+    }
+
+    df <- as.data.frame(cols_list, stringsAsFactors = FALSE, check.names = FALSE)
+    valid <- stats::complete.cases(df)
+    out <- rep(NA_real_, n_pts)
+
+    if (any(valid)) {
+      df_valid <- df[valid, feature_names, drop = FALSE]
+      out[valid] <- predict.mlpp_model(object, newdata = df_valid, type = scale, ...)
+    }
+    out
+  }
+
+  lf <- spatstat.linnet::linfun(f_predict, network)
+  spatstat.linnet::as.linim(lf, eps = eps)
 }

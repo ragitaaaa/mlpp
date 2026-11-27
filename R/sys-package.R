@@ -8,21 +8,40 @@
 #'
 #' @details
 #' Main entry points in the package workflow:
-#' - **Data preparation**: [prepare_gbpp()], [prepare_gbpp_network()], [prepare_quad_data()],
-#'   [new_gbpp_data()], [validate_gbpp_data()].
-#' - **Interaction & iterative weights**: [est_interaction()], [est_net_interaction()],
-#'   [attach_interaction()], [attach_net_interaction()], [attach_stat_weight()],
-#'   [calc_iter_poisson_weight()], [calc_iter_logistic_weight()].
-#' - **Model fitting & prediction**: [fit_gbpp()], [predict.gbpp_model()], [plot.gbpp_model()],
-#'   [save_gbpp_model()], [load_gbpp_model()].
-#' - **Diagnostics & cross-validation**: [cv_gbpp()], [explain_gbpp()],
-#'   [calc_poisson_loglik()], [calc_poisson_deviance()].
-#' - **Python backend setup**: [configure_gbpp_python()], [install_gbpp_python()],
-#'   [check_gbpp_python()], [get_gbpp_python()].
+#' - **Data preparation**: [prepare_mlpp()], [mlpp_data()].
+#' - **Weights & interaction**: [attach_weights()], [attach_interaction()].
+#' - **Model fitting & prediction**: [fit_gbpp()], [predict.mlpp_model()],
+#'   [plot.mlpp_model()], [save_mlpp()], [load_mlpp()].
+#' - **Evaluation, cross-validation & explainability**: [eval_mlpp()], [cv_mlpp()],
+#'   [explain_mlpp()].
+#' - **Python backend setup**: [install_mlpp_python()], [check_mlpp_python()].
 #'
 #' @references
 #' Baddeley, A., Rubak, E., & Turner, R. (2015). *Spatial Point Patterns:
 #' Methodology and Applications with R*. Chapman and Hall/CRC.
+#'
+#' Chen, T., & Guestrin, C. (2016). XGBoost: A scalable tree boosting system.
+#' *Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge
+#' Discovery and Data Mining*, 785--794. \doi{10.1145/2939672.2939785}
+#'
+#' Ke, G., Meng, Q., Finley, T., Wang, T., Chen, W., Ma, W., Ye, Q., & Liu,
+#' T.-Y. (2017). LightGBM: A highly efficient gradient boosting decision tree.
+#' *Advances in Neural Information Processing Systems*, 30, 3146--3154.
+#'
+#' Prokhorenkova, L., Gusev, G., Vorobev, A., Dorogush, A. V., & Gulin, A.
+#' (2018). CatBoost: Unbiased boosting with categorical features. *Advances in
+#' Neural Information Processing Systems*, 31, 6638--6648.
+#' \doi{10.48550/arXiv.1706.09516}
+#'
+#' Lundberg, S. M., Erion, G., Chen, H., DeGrave, A., Prutkin, J. M., Nair, B.,
+#' Katz, R., Himmelfarb, J., Bansal, N., & Lee, S.-I. (2020).
+#' From local explanations to global understanding with explainable AI for trees.
+#' *Nature Machine Intelligence*, 2(1), 56--67.
+#' \doi{10.1038/s42256-019-0138-9}
+#'
+#' Cronie, O., Moradi, M., & Biscio, C. A. N. (2024). A cross-validation-based
+#' statistical theory for point processes. *Biometrika*, 111(2), 625--641.
+#' \doi{10.1093/biomet/asad041}
 #'
 #' Lu, C., Guan, Y., van Lieshout, M.-C., & Xu, G. (2025). XGBoostPP: Tree-based
 #' estimation of point process intensity functions. *Journal of Computational and
@@ -34,8 +53,8 @@
 #' Mathematical and Statistical Sciences*, 5(2), 472--496.
 #' \doi{10.21608/cjmss.2026.452469.1353}
 #'
-#' @seealso [prepare_gbpp()], [prepare_gbpp_network()], [fit_gbpp()],
-#'   [cv_gbpp()], [explain_gbpp()]
+#' @seealso [prepare_mlpp()], [mlpp_data()], [fit_gbpp()], [cv_mlpp()],
+#'   [explain_mlpp()]
 #'
 #' @importFrom stats complete.cases predict sd
 #' @keywords internal
