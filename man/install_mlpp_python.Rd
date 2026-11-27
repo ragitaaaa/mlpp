@@ -2,7 +2,7 @@
 % Please edit documentation in R/sys-python.R
 \name{install_mlpp_python}
 \alias{install_mlpp_python}
-\title{Install Python dependencies for mlpp}
+\title{Install Python Dependencies for mlpp}
 \usage{
 install_mlpp_python(envname = "r-mlpp", method = "auto", ...)
 }

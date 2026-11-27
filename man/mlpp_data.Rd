@@ -2,7 +2,7 @@
 % Please edit documentation in R/data-class.R
 \name{mlpp_data}
 \alias{mlpp_data}
-\title{Construct an mlpp point process data object}
+\title{Construct an mlpp Point Process Data Object}
 \usage{
 mlpp_data(
   X,

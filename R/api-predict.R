@@ -218,7 +218,7 @@ predict.mlpp_model <- function(
   )
 }
 
-#' Print a fitted mlpp model
+#' Print a Fitted mlpp Model
 #'
 #' Prints a concise summary of a fitted `mlpp_model` object, including the
 #' engine, objective, tree count, baseline offset, and feature names.

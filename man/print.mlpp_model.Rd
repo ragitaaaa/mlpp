@@ -2,7 +2,7 @@
 % Please edit documentation in R/api-predict.R
 \name{print.mlpp_model}
 \alias{print.mlpp_model}
-\title{Print a fitted mlpp model}
+\title{Print a Fitted mlpp Model}
 \usage{
 \method{print}{mlpp_model}(x, ...)
 }

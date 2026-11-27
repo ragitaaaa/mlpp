@@ -1,4 +1,4 @@
-#' Estimate and attach a spatial interaction integral to mlpp data
+#' Estimate and Attach a Spatial Interaction Integral to mlpp Data
 #'
 #' Estimates the spatial interaction integral \eqn{A_i} used by the iteratively
 #' weighted objectives (`"iterative_poisson"`, `"iterative_logistic"`) on either

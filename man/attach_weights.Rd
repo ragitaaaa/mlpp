@@ -2,7 +2,7 @@
 % Please edit documentation in R/data-class.R
 \name{attach_weights}
 \alias{attach_weights}
-\title{Attach statistical weights to an mlpp data object}
+\title{Attach Statistical Weights to an mlpp Data Object}
 \usage{
 attach_weights(data, weights)
 }

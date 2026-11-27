@@ -2,7 +2,7 @@
 % Please edit documentation in R/data-prepare.R
 \name{prepare_mlpp}
 \alias{prepare_mlpp}
-\title{Prepare an mlpp spatial point-process data object}
+\title{Prepare an mlpp Spatial Point-Process Data Object}
 \usage{
 prepare_mlpp(
   x,

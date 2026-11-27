@@ -1,4 +1,4 @@
-#' Construct an mlpp point process data object
+#' Construct an mlpp Point Process Data Object
 #'
 #' Creates and validates an S3 object of class `mlpp_data` encapsulating
 #' observed points, quadrature background dummy points, covariates, weights,
@@ -112,7 +112,7 @@ mlpp_data <- function(
   out
 }
 
-#' Print an mlpp data object
+#' Print an mlpp Data Object
 #'
 #' Prints a compact summary of an `mlpp_data` object, including domain type,
 #' event and dummy point counts, covariate names, and presence of quadrature,
@@ -162,7 +162,7 @@ print.mlpp_data <- function(x, ...) {
   invisible(x)
 }
 
-#' Attach statistical weights to an mlpp data object
+#' Attach Statistical Weights to an mlpp Data Object
 #'
 #' Attaches custom statistical weights \eqn{w_i} (e.g., from pilot intensity
 #' estimation or inverse probability weighting) to an existing `mlpp_data` object

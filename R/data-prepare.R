@@ -1,4 +1,4 @@
-#' Prepare an mlpp spatial point-process data object
+#' Prepare an mlpp Spatial Point-Process Data Object
 #'
 #' Unified data preparation entry point supporting planar point patterns
 #' (`ppp`), linear network point patterns (`lpp`), and pre-built `spatstat`

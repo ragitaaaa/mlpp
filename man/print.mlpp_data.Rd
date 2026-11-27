@@ -2,7 +2,7 @@
 % Please edit documentation in R/data-class.R
 \name{print.mlpp_data}
 \alias{print.mlpp_data}
-\title{Print an mlpp data object}
+\title{Print an mlpp Data Object}
 \usage{
 \method{print}{mlpp_data}(x, ...)
 }

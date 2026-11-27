@@ -2,7 +2,7 @@
 # mlpp - Spatial Surface and Cross-Validation Plotting Methods
 # ============================================================
 
-#' Plot continuous spatial predictions from a fitted mlpp model
+#' Plot Continuous Spatial Predictions from a Fitted mlpp Model
 #'
 #' Generates a spatial intensity or log-intensity (`link`) surface map using the
 #' `spatstat` plotting engine.

@@ -130,7 +130,7 @@
   )
 }
 
-#' Install Python dependencies for mlpp
+#' Install Python Dependencies for mlpp
 #'
 #' Automatically creates an isolated virtual environment (`"r-mlpp"`) and
 #' installs the required Python dependencies: `numpy`, `scipy`, `pandas`,

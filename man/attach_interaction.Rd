@@ -2,7 +2,7 @@
 % Please edit documentation in R/math-interaction.R
 \name{attach_interaction}
 \alias{attach_interaction}
-\title{Estimate and attach a spatial interaction integral to mlpp data}
+\title{Estimate and Attach a Spatial Interaction Integral to mlpp Data}
 \usage{
 attach_interaction(
   data,

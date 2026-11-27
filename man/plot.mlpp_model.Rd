@@ -2,7 +2,7 @@
 % Please edit documentation in R/api-plot.R
 \name{plot.mlpp_model}
 \alias{plot.mlpp_model}
-\title{Plot continuous spatial predictions from a fitted mlpp model}
+\title{Plot Continuous Spatial Predictions from a Fitted mlpp Model}
 \usage{
 \method{plot}{mlpp_model}(
   x,
