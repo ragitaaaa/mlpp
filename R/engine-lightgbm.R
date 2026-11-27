@@ -1,30 +1,12 @@
 # ============================================================
-# GBPP - LightGBM Backend Engine
-# ============================================================
-
-#' Import the LightGBM Python module for GBPP
-#'
-#' @keywords internal
-#' @noRd
-.gbpp_lightgbm_module <- function() {
-  configure_gbpp_python()
-  python_path <- get_gbpp_python()
-
-  reticulate::import_from_path(
-    module = "gbpp_lightgbm",
-    path = python_path
-  )
-}
-
-# ============================================================
-# Internal Engine Fitting Function
+# mlpp - LightGBM Backend Engine
 # ============================================================
 
 #' Internal LightGBM engine fitting function
 #'
 #' @keywords internal
 #' @noRd
-.gbpp_fit_lightgbm <- function(
+.fit_lgb <- function(
   data,
   objective,
   params,
@@ -32,20 +14,20 @@
   baseline = NULL,
   ...
 ) {
-  validate_gbpp_data(data, objective = objective)
+  .check_data(data, objective = objective)
   if (is.null(ncol(data$X)) || ncol(data$X) == 0L) {
     stop(
       "`data$X` must contain at least one covariate column to fit a tree model.",
       call. = FALSE
     )
   }
-  configure_gbpp_python()
+  .init_python()
 
   lgb <- reticulate::import("lightgbm", delay_load = FALSE)
 
   feature_names <- colnames(data$X)
-  factor_levels <- .gbpp_extract_factor_levels(data$X)
-  bl <- .gbpp_init_baseline(data, objective, baseline)
+  factor_levels <- .factor_levels(data$X)
+  bl <- .init_baseline(data, objective, baseline)
   init_score <- if (bl$has_nonzero) bl$vec else NULL
 
   if (nrow(data$X) < 20L) {
@@ -68,7 +50,7 @@
     ds_params$min_data_in_leaf <- as.integer(params$min_data_in_leaf)
   }
 
-  X_data <- .gbpp_encode_features(
+  X_data <- .encode_X(
     data$X,
     factor_levels = factor_levels,
     feature_names = feature_names,
@@ -89,18 +71,18 @@
     params = if (length(ds_params) > 0) ds_params else NULL
   )
 
-  py_objective <- .gbpp_make_objective(
+  py_objective <- .make_obj(
     engine = "lightgbm",
     objective = objective,
-    quadrature_weight = data$quadrature_weight,
-    dummy_intensity = data$dummy_intensity,
-    statistical_weight = data$statistical_weight,
-    interaction_integral = data$interaction_integral
+    v = data$quadrature_weight,
+    delta = data$dummy_intensity,
+    w = data$statistical_weight,
+    A = data$interaction_integral
   )
 
   if (!is.null(params$objective)) {
     warning(
-      "Ignoring user-supplied `params$objective`; `gbpp` supplies a custom quadrature-weighted objective.",
+      "Ignoring user-supplied `params$objective`; `mlpp` supplies a custom quadrature-weighted objective.",
       call. = FALSE
     )
   }
@@ -124,7 +106,7 @@
   params_meta <- params
   params_meta$objective <- objective
 
-  .gbpp_finalize_model(
+  .wrap_model(
     raw_model = raw_model,
     engine = "lightgbm",
     objective = objective,
@@ -135,23 +117,4 @@
     n_trees = n_trees,
     data = data
   )
-}
-
-# ============================================================
-# SHAP Extraction
-# ============================================================
-
-#' @export
-.gbpp_shap.gbpp_lightgbm <- function(object, newdata, ...) {
-  object <- .gbpp_rehydrate_model(object)
-
-  X_data <- .gbpp_encode_features(
-    newdata,
-    factor_levels = attr(object, "factor_levels"),
-    feature_names = attr(object, "feature_names"),
-    engine = "lightgbm"
-  )
-
-  shap_vals <- object$predict(as.matrix(X_data), pred_contrib = TRUE)
-  .gbpp_finalize_shap(shap_vals, object, nrow(X_data))
 }

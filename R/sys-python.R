@@ -1,39 +1,22 @@
-#' Configure and validate the Python environment used by GBPP
+#' Configure and validate the Python environment used by mlpp
 #'
 #' Configures `reticulate` to use the Python interpreter specified by
-#' the `GBPP_PYTHON` or `RETICULATE_PYTHON` environment variable or,
-#' when neither is set, auto-discovers a project-local virtual environment (`.venv`).
-#'
-#' @details
-#' Resolution precedence order when Python has not yet been initialized in the
-#' current R session:
-#' 1. Explicit `GBPP_PYTHON` environment variable.
-#' 2. `RETICULATE_PYTHON` environment variable.
-#' 3. Nearest `.venv` directory found in the working directory or up to five
-#'    parent directories.
-#' 4. Existing `"r-gbpp"` virtualenv or conda environment, or `reticulate::py_discover_config()`.
+#' `MLPP_PYTHON` (with fallback to `GBPP_PYTHON` or `RETICULATE_PYTHON`) or,
+#' when none is set, auto-discovers a project-local `.venv` or existing
+#' `"r-mlpp"` / `"r-gbpp"` environment.
 #'
 #' @return Invisibly returns `TRUE` if the Python environment is available.
-#'
-#' @references
-#' Ushey, K., Allaire, J. J., & Tang, Y. (2024). *reticulate: Interface to Python*.
-#' R package.
-#'
-#' @seealso [check_gbpp_python()], [install_gbpp_python()], [get_gbpp_python()]
-#'
-#' @examples
-#' \dontrun{
-#' configure_gbpp_python()
-#' }
-#' @export
-configure_gbpp_python <- function() {
-  # If Python is already initialized in this R session, avoid re-initialization
+#' @keywords internal
+#' @noRd
+.init_python <- function() {
   if (reticulate::py_available(initialize = FALSE)) {
     return(invisible(TRUE))
   }
 
-  python <- Sys.getenv("GBPP_PYTHON")
-
+  python <- Sys.getenv("MLPP_PYTHON")
+  if (!nzchar(python)) {
+    python <- Sys.getenv("GBPP_PYTHON")
+  }
   if (!nzchar(python)) {
     python <- Sys.getenv("RETICULATE_PYTHON")
   }
@@ -60,13 +43,15 @@ configure_gbpp_python <- function() {
     }
 
     if (is.null(candidate) || !file.exists(candidate)) {
-      if (tryCatch(reticulate::virtualenv_exists("r-gbpp"), error = function(e) FALSE)) {
-        reticulate::use_virtualenv("r-gbpp", required = TRUE)
-        return(invisible(TRUE))
-      }
-      if (tryCatch(reticulate::condaenv_exists("r-gbpp"), error = function(e) FALSE)) {
-        reticulate::use_condaenv("r-gbpp", required = TRUE)
-        return(invisible(TRUE))
+      for (env in c("r-mlpp", "r-gbpp")) {
+        if (tryCatch(reticulate::virtualenv_exists(env), error = function(e) FALSE)) {
+          reticulate::use_virtualenv(env, required = TRUE)
+          return(invisible(TRUE))
+        }
+        if (tryCatch(reticulate::condaenv_exists(env), error = function(e) FALSE)) {
+          reticulate::use_condaenv(env, required = TRUE)
+          return(invisible(TRUE))
+        }
       }
       disc <- tryCatch(reticulate::py_discover_config(), error = function(e) NULL)
       if (!is.null(disc) && nzchar(disc$python) && file.exists(disc$python)) {
@@ -79,12 +64,12 @@ configure_gbpp_python <- function() {
     } else {
       stop(
         paste0(
-          "GBPP Python environment could not be found.\n",
+          "MLPP Python environment could not be found.\n",
           "You can automatically set up a dedicated environment with all required ",
           "packages by running:\n",
-          "  mlpp::install_gbpp_python()\n",
+          "  mlpp::install_mlpp_python()\n",
           "Or configure an existing Python interpreter via ",
-          "`Sys.setenv(GBPP_PYTHON = 'path/to/python')`."
+          "`Sys.setenv(MLPP_PYTHON = 'path/to/python')`."
         ),
         call. = FALSE
       )
@@ -109,26 +94,16 @@ configure_gbpp_python <- function() {
   invisible(TRUE)
 }
 
-#' Locate GBPP's bundled Python backend files
+#' Locate mlpp's bundled Python backend files
 #'
 #' Resolves the filesystem path to the package's `inst/python` directory containing
-#' the custom point process objectives and engine adapters.
-#'
-#' @details
-#' Checks `system.file("python", package = "mlpp")` first and falls back to
-#' searching for `inst/python` from the current working directory up to five
-#' parent levels during local package development.
+#' custom point process objectives and engine adapters.
 #'
 #' @return Character scalar containing the normalized path to the Python backend
 #'   module directory.
-#'
-#' @seealso [configure_gbpp_python()], [check_gbpp_python()]
-#'
-#' @examples
-#' py_dir <- get_gbpp_python()
-#' dir.exists(py_dir)
-#' @export
-get_gbpp_python <- function() {
+#' @keywords internal
+#' @noRd
+.py_path <- function() {
   path <- system.file(
     "python",
     package = "mlpp"
@@ -138,7 +113,6 @@ get_gbpp_python <- function() {
     return(normalizePath(path, winslash = "/"))
   }
 
-  # Development fallback: search current directory and up to 5 parent levels
   curr <- normalizePath(getwd(), winslash = "/", mustWork = FALSE)
   for (i in seq_len(5L)) {
     candidate <- file.path(curr, "inst", "python")
@@ -151,27 +125,26 @@ get_gbpp_python <- function() {
   }
 
   stop(
-    "GBPP Python backend files could not be found.",
+    "MLPP Python backend files could not be found.",
     call. = FALSE
   )
 }
 
-#' Install Python dependencies for GBPP
+#' Install Python dependencies for mlpp
 #'
-#' Automatically creates an isolated virtual environment (`"r-gbpp"`) and
+#' Automatically creates an isolated virtual environment (`"r-mlpp"`) and
 #' installs the required Python dependencies: `numpy`, `scipy`, `pandas`,
 #' `xgboost`, `lightgbm`, and `catboost`.
 #'
-#' @param envname Name of the Python virtual environment. Default is `"r-gbpp"`.
+#' @param envname Name of the Python virtual environment. Default is `"r-mlpp"`.
 #' @param method Method passed to [reticulate::py_install()], e.g. `"auto"`,
 #'   `"virtualenv"`, or `"conda"`.
 #' @param ... Additional arguments passed to [reticulate::py_install()].
 #'
 #' @details
-#' Installs the Python packages needed by `fit_gbpp()` and `explain_gbpp()`.
-#' Calling this function downloads packages and modifies/creates a Python
-#' environment; in automated environments or CRAN checks it should not be run
-#' automatically.
+#' Installs the Python packages needed by [fit_gbpp()] and [explain_mlpp()].
+#' Calling this function downloads packages and modifies or creates a Python
+#' environment; in automated checks it should not be run unconditionally.
 #'
 #' @return Invisibly returns `TRUE` on success.
 #'
@@ -179,21 +152,21 @@ get_gbpp_python <- function() {
 #' Ushey, K., Allaire, J. J., & Tang, Y. (2024). *reticulate: Interface to Python*.
 #' R package.
 #'
-#' @seealso [configure_gbpp_python()], [check_gbpp_python()]
+#' @seealso [check_mlpp_python()], [fit_gbpp()]
 #'
 #' @examples
 #' \dontrun{
-#' install_gbpp_python(envname = "r-gbpp")
+#' install_mlpp_python(envname = "r-mlpp")
 #' }
 #' @export
-install_gbpp_python <- function(
-  envname = "r-gbpp",
+install_mlpp_python <- function(
+  envname = "r-mlpp",
   method = "auto",
   ...
 ) {
   pkgs <- c("numpy", "scipy", "pandas", "xgboost", "lightgbm", "catboost")
   message(
-    "Installing GBPP Python dependencies (",
+    "Installing MLPP Python dependencies (",
     paste(pkgs, collapse = ", "),
     ") into environment '", envname, "'..."
   )
@@ -203,35 +176,40 @@ install_gbpp_python <- function(
     method = method,
     ...
   )
-  message("GBPP Python dependencies installed successfully!")
+  message("MLPP Python dependencies installed successfully!")
   invisible(TRUE)
 }
 
-#' Check GBPP Python Environment and Engine Status
+#' Check mlpp Python Environment and Engine Status
 #'
 #' Verifies that Python is properly configured and inspects the availability and
 #' versions of required packages (`lightgbm`, `catboost`, `xgboost`, `numpy`,
 #' `scipy`, `pandas`).
 #'
 #' @details
-#' Calls [configure_gbpp_python()] and prints the active Python executable,
-#' version, and module availability table.
+#' Discovers Python using `MLPP_PYTHON` (or `GBPP_PYTHON` / `RETICULATE_PYTHON`),
+#' any nearby project `.venv`, or an existing `"r-mlpp"` / `"r-gbpp"` environment,
+#' then prints the active Python executable, version, and module availability table.
 #'
 #' @return Invisibly returns a named logical vector of package availability
 #'   (`TRUE` when importable, `FALSE` otherwise).
 #'
-#' @seealso [configure_gbpp_python()], [install_gbpp_python()], [get_gbpp_python()]
+#' @references
+#' Ushey, K., Allaire, J. J., & Tang, Y. (2024). *reticulate: Interface to Python*.
+#' R package.
+#'
+#' @seealso [install_mlpp_python()], [fit_gbpp()]
 #'
 #' @examples
 #' if (reticulate::py_available()) {
-#'   status <- check_gbpp_python()
+#'   status <- check_mlpp_python()
 #'   print(status)
 #' }
 #' @export
-check_gbpp_python <- function() {
-  cat("GBPP Python Environment Diagnostic\n")
+check_mlpp_python <- function() {
+  cat("MLPP Python Environment Diagnostic\n")
   cat("------------------------------------\n")
-  configure_gbpp_python()
+  .init_python()
   py_config <- reticulate::py_config()
   cat("Python executable :", py_config$python, "\n")
   cat("Python version    :", as.character(py_config$version), "\n")

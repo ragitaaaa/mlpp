@@ -1,65 +1,12 @@
 # ============================================================
-# GBPP - CatBoost Backend Engine
-# ============================================================
-
-.gbpp_catboost_module <- local({
-  module <- NULL
-
-  function() {
-    if (!is.null(module)) {
-      return(module)
-    }
-
-    configure_gbpp_python()
-
-    python_path <- file.path(
-      get_gbpp_python(),
-      "gbpp_catboost.py"
-    )
-
-    if (!file.exists(python_path)) {
-      stop(
-        "CatBoost Python backend not found at: ",
-        python_path,
-        call. = FALSE
-      )
-    }
-
-    module <- reticulate::import_from_path(
-      module = "gbpp_catboost",
-      path = dirname(python_path),
-      delay_load = FALSE
-    )
-
-    module
-  }
-})
-
-.gbpp_catboost <- local({
-  module <- NULL
-
-  function() {
-    if (is.null(module)) {
-      configure_gbpp_python()
-      module <- reticulate::import(
-        "catboost",
-        delay_load = FALSE
-      )
-    }
-
-    module
-  }
-})
-
-# ============================================================
-# Internal Engine Fitting Function
+# mlpp - CatBoost Backend Engine
 # ============================================================
 
 #' Internal CatBoost engine fitting function
 #'
 #' @keywords internal
 #' @noRd
-.gbpp_fit_catboost <- function(
+.fit_cb <- function(
   data,
   objective,
   params,
@@ -67,22 +14,21 @@
   baseline = NULL,
   ...
 ) {
-  validate_gbpp_data(data, objective = objective)
+  .check_data(data, objective = objective)
   if (is.null(ncol(data$X)) || ncol(data$X) == 0L) {
     stop(
       "`data$X` must contain at least one covariate column to fit a tree model.",
       call. = FALSE
     )
   }
-  configure_gbpp_python()
+  .init_python()
 
-  catboost <- .gbpp_catboost()
+  catboost <- reticulate::import("catboost", delay_load = FALSE)
   feature_names <- colnames(data$X)
-  factor_levels <- .gbpp_extract_factor_levels(data$X)
+  factor_levels <- .factor_levels(data$X)
 
   cat_features_idx <- NULL
 
-  # Handle data frame vs matrix and categorical columns
   if (is.matrix(data$X)) {
     if (!is.numeric(data$X)) {
       stop("`data$X` matrix must be numeric.", call. = FALSE)
@@ -119,14 +65,14 @@
     }
   }
 
-  X <- .gbpp_encode_features(
+  X <- .encode_X(
     data$X,
     factor_levels = factor_levels,
     feature_names = feature_names,
     engine = "catboost"
   )
 
-  bl <- .gbpp_init_baseline(data, objective, baseline)
+  bl <- .init_baseline(data, objective, baseline)
   base_vec <- if (!is.null(bl$vec)) bl$vec else rep(0.0, nrow(X))
 
   if (is.null(params$allow_writing_files)) {
@@ -162,13 +108,12 @@
       params$bootstrap_type <- NULL
     }
 
-    py_objective <- .gbpp_make_objective(
+    py_objective <- .make_obj(
       engine = "catboost",
       objective = objective,
-      quadrature_weight = data$quadrature_weight,
-      dummy_intensity = data$dummy_intensity,
-      interaction_integral = data$interaction_integral,
-      stateless = FALSE
+      v = data$quadrature_weight,
+      delta = data$dummy_intensity,
+      A = data$interaction_integral
     )
 
     train_pool <- catboost$Pool(
@@ -191,10 +136,9 @@
       NULL
     }
 
-    py_objective <- .gbpp_make_objective(
+    py_objective <- .make_obj(
       engine = "catboost",
-      objective = objective,
-      stateless = TRUE
+      objective = objective
     )
 
     train_pool <- catboost$Pool(
@@ -208,7 +152,7 @@
 
   if (!is.null(params$loss_function)) {
     warning(
-      "Ignoring user-supplied `params$loss_function`; `gbpp` supplies a custom quadrature-weighted objective.",
+      "Ignoring user-supplied `params$loss_function`; `mlpp` supplies a custom quadrature-weighted objective.",
       call. = FALSE
     )
   }
@@ -225,11 +169,10 @@
 
   do.call(raw_model$fit, fit_args)
 
-  # Store plain R metadata (avoid holding Python pointers in attributes)
   params_meta <- params
   params_meta$loss_function <- objective
 
-  .gbpp_finalize_model(
+  .wrap_model(
     raw_model = raw_model,
     engine = "catboost",
     objective = objective,
@@ -241,36 +184,4 @@
     data = data,
     extra_attrs = list(cat_features = cat_features_idx)
   )
-}
-
-# ============================================================
-# SHAP Extraction
-# ============================================================
-
-#' @export
-.gbpp_shap.gbpp_catboost <- function(object, newdata, ...) {
-  object <- .gbpp_rehydrate_model(object)
-  catboost <- .gbpp_catboost()
-
-  feat_names <- attr(object, "feature_names")
-  X_enc <- .gbpp_encode_features(
-    newdata,
-    factor_levels = attr(object, "factor_levels"),
-    feature_names = feat_names,
-    engine = "catboost"
-  )
-
-  cat_idx <- attr(object, "cat_features")
-  if (is.null(cat_idx) && !is.null(attr(object, "factor_levels")) && !is.null(feat_names)) {
-    cat_idx <- as.integer(which(feat_names %in% names(attr(object, "factor_levels"))) - 1L)
-  }
-
-  if (is.data.frame(X_enc) && !is.null(cat_idx) && length(cat_idx) > 0L) {
-    pool <- catboost$Pool(data = X_enc, cat_features = as.list(as.integer(cat_idx)))
-  } else {
-    pool <- catboost$Pool(data = as.matrix(X_enc))
-  }
-
-  shap_vals <- object$get_feature_importance(data = pool, type = "ShapValues")
-  .gbpp_finalize_shap(shap_vals, object, nrow(X_enc))
 }

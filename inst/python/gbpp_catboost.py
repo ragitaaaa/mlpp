@@ -1,4 +1,4 @@
-"""CatBoost custom objectives for the GBPP package."""
+"""CatBoost custom point-process objectives for mlpp."""
 
 import math
 
@@ -7,48 +7,32 @@ import numpy as np
 
 _CLIP_MIN = -50.0
 _CLIP_MAX = 50.0
+_MIN_DENOM = 1e-4
 
 
 def _as_float_array(values, name):
     """Convert values to a finite one-dimensional float array."""
-    values = np.asarray(values, dtype=float)
+    arr = np.asarray(values, dtype=float)
+    if arr.ndim == 0:
+        arr = arr.reshape(1)
 
-    if values.ndim != 1:
+    if arr.ndim != 1:
         raise ValueError(f"{name} must be a one-dimensional array.")
 
-    if not np.all(np.isfinite(values)):
+    if not np.all(np.isfinite(arr)):
         raise ValueError(f"{name} must contain only finite values.")
 
-    return values
+    return arr
 
 
 def _check_length(values, n, name):
     """Check that an array has the expected length."""
     if len(values) != n:
-        raise ValueError(
-            f"{name} must have length {n}, got {len(values)}."
-        )
-
-
-def _safe_exp(value):
-    """Exponentiate a value after clipping to a safe numerical range."""
-    value = min(max(float(value), _CLIP_MIN), _CLIP_MAX)
-    return math.exp(value)
-
-
-def _safe_sigmoid(eta, delta):
-    """Compute numerically stable logistic probability sigmoid(eta - log(delta))."""
-    logit = min(max(float(eta) - math.log(delta), _CLIP_MIN), _CLIP_MAX)
-    return 1.0 / (1.0 + math.exp(-logit))
+        raise ValueError(f"{name} must have length {n}, got {len(values)}.")
 
 
 def _get_weights(weights, n):
-    """
-    Return CatBoost-provided weights.
-
-    CatBoost passes None when no Pool weights are supplied.
-    In that case, use unit weights.
-    """
+    """Return validated CatBoost Pool weights or unit weights when omitted."""
     if weights is None:
         return np.ones(n, dtype=float)
 
@@ -61,14 +45,12 @@ def _get_weights(weights, n):
     return weights
 
 
-class StatelessPoissonObjective:
-    """
-    Stateless, Numba-compilable Poisson / weighted Poisson objective.
+class PoissonLoss:
+    """Stateless, Numba-compilable Poisson / weighted Poisson objective.
 
-    Caller supplies `baseline = eta0 + log(quadrature_weight)` (plus any
-    custom baseline vector) and optional `weight = statistical_weight` via
-    `catboost.Pool`. Because no per-instance array state is stored on `self`,
-    CatBoost compiles `calc_ders_range` with Numba JIT and remains exact
+    Caller supplies `baseline = eta0 + log(quadrature_weight)` and optional
+    `weight = statistical_weight` via `catboost.Pool`. Keeping the pure-Python
+    scalar loop enables CatBoost Numba JIT compilation and exact execution
     under `Ordered` boosting, row subsampling, and multi-threading.
     """
 
@@ -87,13 +69,11 @@ class StatelessPoissonObjective:
         return result
 
 
-class StatelessLogisticObjective:
-    """
-    Stateless, Numba-compilable Logistic / weighted Logistic objective.
+class LogisticLoss:
+    """Stateless, Numba-compilable Logistic / weighted Logistic objective.
 
-    Caller supplies `baseline = eta0 - log(dummy_intensity)` (plus any
-    custom baseline vector) and optional `weight = statistical_weight` via
-    `catboost.Pool`.
+    Caller supplies `baseline = eta0 - log(dummy_intensity)` and optional
+    `weight = statistical_weight` via `catboost.Pool`.
     """
 
     def calc_ders_range(self, approxes, targets, weights):
@@ -111,33 +91,16 @@ class StatelessLogisticObjective:
         return result
 
 
-StatelessWeightedPoissonObjective = StatelessPoissonObjective
-StatelessWeightedLogisticObjective = StatelessLogisticObjective
-
-
 class _BatchObjective:
-    """
-    Manage sequential batches supplied by CatBoost.
-
-    CatBoost may call calc_ders_range() with only a subset of the
-    training observations. The subset is supplied in the original
-    observation order. This class maps each batch back to the
-    corresponding slice of the full observation-level arrays.
-    """
+    """Manage sequential observation slices supplied by CatBoost."""
 
     def __init__(self, n_obs):
         self._n_obs = int(n_obs)
         self._offset = 0
 
     def _next_batch(self, n):
-        """
-        Return the starting index of the next CatBoost batch.
-
-        The cursor is reset after a complete pass through all
-        observations.
-        """
+        """Return the starting index of the next sequential CatBoost batch."""
         n = int(n)
-
         if n < 0:
             raise ValueError("Batch size must be non-negative.")
 
@@ -147,561 +110,101 @@ class _BatchObjective:
         if self._offset + n > self._n_obs:
             raise ValueError(
                 "CatBoost batch exceeds the stored observation range: "
-                f"offset={self._offset}, batch_size={n}, "
-                f"n_obs={self._n_obs}."
+                f"offset={self._offset}, batch_size={n}, n_obs={self._n_obs}."
             )
 
         start = self._offset
         self._offset += n
-
         return start
 
     def _batch_slice(self, values, start, n, name):
         """Return the observation-level values for the current batch."""
         _check_length(values, self._n_obs, name)
-
         return values[start:start + n]
 
 
-class PoissonObjective(_BatchObjective):
-    """GBPP ordinary Poisson objective."""
+class IterPoissonLoss(_BatchObjective):
+    """Iteratively reweighted Poisson objective for CatBoost (`Plain` mode)."""
 
-    def __init__(self, quadrature_weight):
-        self.quadrature_weight = _as_float_array(
-            quadrature_weight,
-            "quadrature_weight",
-        )
-
-        super().__init__(len(self.quadrature_weight))
+    def __init__(self, v, A):
+        self.v = _as_float_array(v, "quadrature_weight")
+        self.A = _as_float_array(A, "interaction_integral")
+        _check_length(self.A, len(self.v), "interaction_integral")
+        super().__init__(len(self.v))
 
     def calc_ders_range(self, approxes, targets, weights):
-        """
-        Calculate CatBoost derivatives.
-
-        GBPP derivatives:
-
-            g_i = v_i * exp(phi_i) - y_i
-            h_i = v_i * exp(phi_i)
-
-        CatBoost expects (-g_i, -h_i).
-        """
+        """Return (-gradient, -hessian) pairs with dynamic dependence weights."""
         targets = _as_float_array(targets, "targets")
         approxes = _as_float_array(approxes, "approxes")
-
         n = len(targets)
-
         _check_length(approxes, n, "approxes")
 
         start = self._next_batch(n)
+        v = self._batch_slice(self.v, start, n, "quadrature_weight")
+        A = self._batch_slice(self.A, start, n, "interaction_integral")
+        cb_w = _get_weights(weights, n)
 
-        quadrature_weight = self._batch_slice(
-            self.quadrature_weight,
-            start,
-            n,
-            "quadrature_weight",
-        )
+        eta = np.clip(approxes, _CLIP_MIN, _CLIP_MAX)
+        lam = np.exp(eta)
+        w = 1.0 / np.maximum(_MIN_DENOM, 1.0 + lam * A)
+        mean_w = np.mean(w)
+        if mean_w > 0.0:
+            w = w / mean_w
 
-        catboost_weights = _get_weights(weights, n)
-
-        result = []
-
-        for i in range(n):
-            lam = _safe_exp(approxes[i])
-
-            gradient = (
-                quadrature_weight[i] * lam
-                - targets[i]
-            )
-
-            hessian = (
-                quadrature_weight[i] * lam
-            )
-
-            gradient *= catboost_weights[i]
-            hessian *= catboost_weights[i]
-
-            result.append(
-                (-gradient, -hessian)
-            )
-
-        return result
+        gradient = cb_w * w * (v * lam - targets)
+        hessian = cb_w * w * v * lam
+        return list(zip((-gradient).tolist(), (-hessian).tolist()))
 
 
-class WeightedPoissonObjective(_BatchObjective):
-    """GBPP fixed weighted Poisson objective."""
+class IterLogisticLoss(_BatchObjective):
+    """Iteratively reweighted logistic objective for CatBoost (`Plain` mode)."""
 
-    def __init__(
-        self,
-        quadrature_weight,
-        statistical_weight,
-    ):
-        self.quadrature_weight = _as_float_array(
-            quadrature_weight,
-            "quadrature_weight",
-        )
+    def __init__(self, delta, A):
+        self.delta = _as_float_array(delta, "dummy_intensity")
+        if np.any(self.delta <= 0.0):
+            raise ValueError("dummy_intensity must be strictly positive.")
+        self.log_delta = np.log(self.delta)
 
-        self.statistical_weight = _as_float_array(
-            statistical_weight,
-            "statistical_weight",
-        )
-
-        _check_length(
-            self.statistical_weight,
-            len(self.quadrature_weight),
-            "statistical_weight",
-        )
-
-        super().__init__(len(self.quadrature_weight))
+        self.A = _as_float_array(A, "interaction_integral")
+        _check_length(self.A, len(self.delta), "interaction_integral")
+        super().__init__(len(self.delta))
 
     def calc_ders_range(self, approxes, targets, weights):
-        """
-        Calculate CatBoost derivatives.
-
-        GBPP derivatives:
-
-            g_i = w_i * (v_i * exp(phi_i) - y_i)
-            h_i = w_i * v_i * exp(phi_i)
-
-        CatBoost expects (-g_i, -h_i).
-        """
+        """Return (-gradient, -hessian) pairs with dynamic dependence weights."""
         targets = _as_float_array(targets, "targets")
         approxes = _as_float_array(approxes, "approxes")
-
         n = len(targets)
-
         _check_length(approxes, n, "approxes")
 
         start = self._next_batch(n)
-
-        quadrature_weight = self._batch_slice(
-            self.quadrature_weight,
-            start,
-            n,
-            "quadrature_weight",
-        )
-
-        statistical_weight = self._batch_slice(
-            self.statistical_weight,
-            start,
-            n,
-            "statistical_weight",
-        )
-
-        catboost_weights = _get_weights(weights, n)
-
-        result = []
-
-        for i in range(n):
-            lam = _safe_exp(approxes[i])
-            w = statistical_weight[i]
-
-            gradient = w * (
-                quadrature_weight[i] * lam
-                - targets[i]
-            )
-
-            hessian = w * (
-                quadrature_weight[i] * lam
-            )
-
-            gradient *= catboost_weights[i]
-            hessian *= catboost_weights[i]
-
-            result.append(
-                (-gradient, -hessian)
-            )
-
-        return result
-
-
-class LogisticObjective(_BatchObjective):
-    """GBPP logistic objective with dummy-process intensity."""
-
-    def __init__(self, dummy_intensity):
-        self.dummy_intensity = _as_float_array(
-            dummy_intensity,
-            "dummy_intensity",
-        )
-
-        if np.any(self.dummy_intensity <= 0.0):
-            raise ValueError(
-                "dummy_intensity must be strictly positive."
-            )
-
-        super().__init__(len(self.dummy_intensity))
-
-    def calc_ders_range(self, approxes, targets, weights):
-        """
-        Calculate CatBoost derivatives.
-
-        GBPP derivatives:
-
-            pi_i = exp(phi_i) /
-                   (exp(phi_i) + delta_i)
-
-            g_i = pi_i - y_i
-            h_i = pi_i * (1 - pi_i)
-
-        CatBoost expects (-g_i, -h_i).
-        """
-        targets = _as_float_array(targets, "targets")
-        approxes = _as_float_array(approxes, "approxes")
-
-        n = len(targets)
-
-        _check_length(approxes, n, "approxes")
-
-        start = self._next_batch(n)
-
-        dummy_intensity = self._batch_slice(
-            self.dummy_intensity,
-            start,
-            n,
-            "dummy_intensity",
-        )
-
-        catboost_weights = _get_weights(weights, n)
-
-        result = []
-
-        for i in range(n):
-            eta = min(
-                max(approxes[i], _CLIP_MIN),
-                _CLIP_MAX,
-            )
-
-            delta = dummy_intensity[i]
-
-            pi = _safe_sigmoid(eta, delta)
-
-            gradient = pi - targets[i]
-
-            hessian = pi * (1.0 - pi)
-
-            gradient *= catboost_weights[i]
-            hessian *= catboost_weights[i]
-
-            result.append(
-                (-gradient, -hessian)
-            )
-
-        return result
-
-
-class WeightedLogisticObjective(_BatchObjective):
-    """GBPP fixed weighted logistic objective."""
-
-    def __init__(
-        self,
-        dummy_intensity,
-        statistical_weight,
-    ):
-        self.dummy_intensity = _as_float_array(
-            dummy_intensity,
-            "dummy_intensity",
-        )
-
-        self.statistical_weight = _as_float_array(
-            statistical_weight,
-            "statistical_weight",
-        )
-
-        if np.any(self.dummy_intensity <= 0.0):
-            raise ValueError(
-                "dummy_intensity must be strictly positive."
-            )
-
-        _check_length(
-            self.statistical_weight,
-            len(self.dummy_intensity),
-            "statistical_weight",
-        )
-
-        super().__init__(len(self.dummy_intensity))
-
-    def calc_ders_range(self, approxes, targets, weights):
-        """
-        Calculate CatBoost derivatives.
-
-        GBPP derivatives:
-
-            g_i = w_i * (pi_i - y_i)
-            h_i = w_i * pi_i * (1 - pi_i)
-
-        CatBoost expects (-g_i, -h_i).
-        """
-        targets = _as_float_array(targets, "targets")
-        approxes = _as_float_array(approxes, "approxes")
-
-        n = len(targets)
-
-        _check_length(approxes, n, "approxes")
-
-        start = self._next_batch(n)
-
-        dummy_intensity = self._batch_slice(
-            self.dummy_intensity,
-            start,
-            n,
-            "dummy_intensity",
-        )
-
-        statistical_weight = self._batch_slice(
-            self.statistical_weight,
-            start,
-            n,
-            "statistical_weight",
-        )
-
-        catboost_weights = _get_weights(weights, n)
-
-        result = []
-
-        for i in range(n):
-            eta = min(
-                max(approxes[i], _CLIP_MIN),
-                _CLIP_MAX,
-            )
-
-            delta = dummy_intensity[i]
-
-            pi = _safe_sigmoid(eta, delta)
-
-            w = statistical_weight[i]
-
-            gradient = w * (
-                pi - targets[i]
-            )
-
-            hessian = w * (
-                pi * (1.0 - pi)
-            )
-
-            gradient *= catboost_weights[i]
-            hessian *= catboost_weights[i]
-
-            result.append(
-                (-gradient, -hessian)
-            )
-
-        return result
-
-
-class IterativePoissonObjective(_BatchObjective):
-    """GBPP iteratively weighted Poisson objective."""
-
-    def __init__(
-        self,
-        quadrature_weight,
-        interaction_integral,
-    ):
-        self.quadrature_weight = _as_float_array(
-            quadrature_weight,
-            "quadrature_weight",
-        )
-
-        self.interaction_integral = _as_float_array(
-            interaction_integral,
-            "interaction_integral",
-        )
-
-        _check_length(
-            self.interaction_integral,
-            len(self.quadrature_weight),
-            "interaction_integral",
-        )
-
-        super().__init__(len(self.quadrature_weight))
-
-    def calc_ders_range(self, approxes, targets, weights):
-        """
-        Calculate CatBoost derivatives.
-
-        Iterative weight:
-
-            w_tilde_i = 1 / max(1e-4, 1 + lambda_i * A_i)
-            w_i = w_tilde_i / mean(w_tilde)
-
-        GBPP derivatives:
-
-            g_i = w_i * (v_i * lambda_i - y_i)
-            h_i = w_i * v_i * lambda_i
-
-        CatBoost expects (-g_i, -h_i).
-        """
-        targets = _as_float_array(targets, "targets")
-        approxes = _as_float_array(approxes, "approxes")
-
-        n = len(targets)
-
-        _check_length(approxes, n, "approxes")
-
-        start = self._next_batch(n)
-
-        quadrature_weight = self._batch_slice(
-            self.quadrature_weight,
-            start,
-            n,
-            "quadrature_weight",
-        )
-
-        interaction_integral = self._batch_slice(
-            self.interaction_integral,
-            start,
-            n,
-            "interaction_integral",
-        )
-
-        catboost_weights = _get_weights(weights, n)
-
-        lams = np.exp(np.clip(approxes, _CLIP_MIN, _CLIP_MAX))
-        denominators = np.maximum(1e-4, 1.0 + lams * interaction_integral)
-        weights = 1.0 / denominators
-        mean_weight = np.mean(weights)
-        if mean_weight > 0.0:
-            weights = weights / mean_weight
-
-        result = []
-
-        for i in range(n):
-            lam = lams[i]
-            weight = weights[i]
-
-            gradient = weight * (
-                quadrature_weight[i] * lam
-                - targets[i]
-            )
-
-            hessian = weight * (
-                quadrature_weight[i] * lam
-            )
-
-            gradient *= catboost_weights[i]
-            hessian *= catboost_weights[i]
-
-            result.append(
-                (-gradient, -hessian)
-            )
-
-        return result
-
-
-class IterativeLogisticObjective(_BatchObjective):
-    """GBPP iteratively weighted logistic objective."""
-
-    def __init__(
-        self,
-        dummy_intensity,
-        interaction_integral,
-    ):
-        self.dummy_intensity = _as_float_array(
-            dummy_intensity,
-            "dummy_intensity",
-        )
-
-        self.interaction_integral = _as_float_array(
-            interaction_integral,
-            "interaction_integral",
-        )
-
-        if np.any(self.dummy_intensity <= 0.0):
-            raise ValueError(
-                "dummy_intensity must be strictly positive."
-            )
-
-        _check_length(
-            self.interaction_integral,
-            len(self.dummy_intensity),
-            "interaction_integral",
-        )
-
-        super().__init__(len(self.dummy_intensity))
-
-    def calc_ders_range(self, approxes, targets, weights):
-        """
-        Calculate CatBoost derivatives.
-
-        Iterative logistic weight:
-
-            w_tilde_i =
-                (lambda_i + delta_i)
-                / [delta_i * max(1e-4, 1 + lambda_i * A_i)]
-            w_i = w_tilde_i / mean(w_tilde)
-
-        where
-
-            lambda_i = exp(phi_i)
-
-            pi_i =
-                lambda_i /
-                (lambda_i + delta_i)
-
-        GBPP derivatives:
-
-            g_i = w_i * (pi_i - y_i)
-            h_i = w_i * pi_i * (1 - pi_i)
-
-        CatBoost expects (-g_i, -h_i).
-        """
-        targets = _as_float_array(targets, "targets")
-        approxes = _as_float_array(approxes, "approxes")
-
-        n = len(targets)
-
-        _check_length(approxes, n, "approxes")
-
-        start = self._next_batch(n)
-
-        dummy_intensity = self._batch_slice(
-            self.dummy_intensity,
-            start,
-            n,
-            "dummy_intensity",
-        )
-
-        interaction_integral = self._batch_slice(
-            self.interaction_integral,
-            start,
-            n,
-            "interaction_integral",
-        )
-
-        catboost_weights = _get_weights(weights, n)
-
-        lams = np.exp(np.clip(approxes, _CLIP_MIN, _CLIP_MAX))
-        denominators = np.maximum(1e-4, 1.0 + lams * interaction_integral)
-        weights = (lams + dummy_intensity) / (dummy_intensity * denominators)
-        mean_weight = np.mean(weights)
-        if mean_weight > 0.0:
-            weights = weights / mean_weight
-
-        result = []
-
-        for i in range(n):
-            eta = min(
-                max(approxes[i], _CLIP_MIN),
-                _CLIP_MAX,
-            )
-
-            delta = dummy_intensity[i]
-
-            weight = weights[i]
-
-            pi = _safe_sigmoid(eta, delta)
-
-            gradient = weight * (
-                pi - targets[i]
-            )
-
-            hessian = weight * (
-                pi * (1.0 - pi)
-            )
-
-            gradient *= catboost_weights[i]
-            hessian *= catboost_weights[i]
-
-            result.append(
-                (-gradient, -hessian)
-            )
-
-        return result
+        delta = self._batch_slice(self.delta, start, n, "dummy_intensity")
+        log_delta = self._batch_slice(self.log_delta, start, n, "log_dummy_intensity")
+        A = self._batch_slice(self.A, start, n, "interaction_integral")
+        cb_w = _get_weights(weights, n)
+
+        eta = np.clip(approxes, _CLIP_MIN, _CLIP_MAX)
+        lam = np.exp(eta)
+        w = (lam + delta) / (delta * np.maximum(_MIN_DENOM, 1.0 + lam * A))
+        mean_w = np.mean(w)
+        if mean_w > 0.0:
+            w = w / mean_w
+
+        logit = np.clip(eta - log_delta, _CLIP_MIN, _CLIP_MAX)
+        pi = 1.0 / (1.0 + np.exp(-logit))
+
+        gradient = cb_w * w * (pi - targets)
+        hessian = cb_w * w * pi * (1.0 - pi)
+        return list(zip((-gradient).tolist(), (-hessian).tolist()))
+
+
+def make_objective(objective, v=None, delta=None, w=None, A=None):
+    """Create a CatBoost custom objective instance."""
+    if objective in ("poisson", "weighted_poisson"):
+        return PoissonLoss()
+    if objective in ("logistic", "weighted_logistic"):
+        return LogisticLoss()
+    if objective == "iterative_poisson":
+        return IterPoissonLoss(v=v, A=A)
+    if objective == "iterative_logistic":
+        return IterLogisticLoss(delta=delta, A=A)
+    raise ValueError(f"Unsupported objective: {objective}")

@@ -1,388 +1,85 @@
-"""
-LightGBM backend for gbpp.
+"""LightGBM custom point-process objectives for mlpp.
 
-This module provides custom objective factories for the six
-GBPP objective functions:
-
-1. Poisson
-2. Weighted Poisson
-3. Logistic
-4. Weighted Logistic
-5. Iterative Poisson
-6. Iterative Logistic
+Provides a unified `make_objective` factory returning `(gradient, hessian)`
+callables for:
+1. Poisson (`poisson`)
+2. Weighted Poisson (`weighted_poisson`)
+3. Logistic (`logistic`)
+4. Weighted Logistic (`weighted_logistic`)
+5. Iterative Poisson (`iterative_poisson`)
+6. Iterative Logistic (`iterative_logistic`)
 """
 
 import numpy as np
 
 
-# ============================================================
-# Utility
-# ============================================================
-
-def _clip_prediction(preds):
-    """
-    Clip raw predictions before exponentiation.
-
-    This prevents numerical overflow in exp(prediction).
-    """
-    return np.clip(np.asarray(preds, dtype=float), -50.0, 50.0)
+_CLIP_MIN = -50.0
+_CLIP_MAX = 50.0
+_MIN_DENOM = 1e-4
+_POISSON_OBJS = ("poisson", "weighted_poisson", "iterative_poisson")
+_LOGISTIC_OBJS = ("logistic", "weighted_logistic", "iterative_logistic")
+_ALL_OBJS = _POISSON_OBJS + _LOGISTIC_OBJS
 
 
-def _safe_sigmoid(phi, log_dummy_intensity):
-    """
-    Compute numerically stable logistic probability sigmoid(phi - log_delta).
-    """
-    logit = np.clip(phi - log_dummy_intensity, -50.0, 50.0)
+def _clip_eta(preds):
+    """Clip raw log-intensity predictions before exponentiation."""
+    return np.clip(np.asarray(preds, dtype=float), _CLIP_MIN, _CLIP_MAX)
+
+
+def _safe_sigmoid(eta, log_delta):
+    """Compute numerically stable sigmoid(eta - log(delta))."""
+    logit = np.clip(eta - log_delta, _CLIP_MIN, _CLIP_MAX)
     return 1.0 / (1.0 + np.exp(-logit))
 
 
-def _get_labels(train_data):
-    """
-    Extract labels from a LightGBM Dataset.
-    """
-    return np.asarray(train_data.get_label(), dtype=float)
-
-
-# ============================================================
-# Poisson
-# ============================================================
-
-def make_poisson_objective(quadrature_weight):
-    """
-    Create the GBPP Poisson custom objective.
-
-    Loss:
-        L = -sum(y_i * phi_i) + sum(v_i * exp(phi_i))
-
-    Gradient:
-        g_i = v_i * exp(phi_i) - y_i
-
-    Hessian:
-        h_i = v_i * exp(phi_i)
-    """
-
-    quadrature_weight = np.asarray(
-        quadrature_weight,
-        dtype=float
-    )
-
-    def poisson_objective(preds, train_data):
-
-        phi = _clip_prediction(preds)
-        labels = _get_labels(train_data)
-
-        lam = np.exp(phi)
-
-        gradient = (
-            quadrature_weight * lam
-            - labels
-        )
-
-        hessian = (
-            quadrature_weight * lam
-        )
-
-        return gradient, hessian
-
-    return poisson_objective
-
-
-# ============================================================
-# Weighted Poisson
-# ============================================================
-
-def make_weighted_poisson_objective(
-    quadrature_weight,
-    statistical_weight
-):
-    """
-    Create the GBPP weighted Poisson custom objective.
-
-    Gradient:
-        g_i = w_i * (v_i * exp(phi_i) - y_i)
-
-    Hessian:
-        h_i = w_i * v_i * exp(phi_i)
-    """
-
-    quadrature_weight = np.asarray(
-        quadrature_weight,
-        dtype=float
-    )
-
-    statistical_weight = np.asarray(
-        statistical_weight,
-        dtype=float
-    )
-
-    def weighted_poisson_objective(preds, train_data):
-
-        phi = _clip_prediction(preds)
-        labels = _get_labels(train_data)
-
-        lam = np.exp(phi)
-
-        gradient = statistical_weight * (
-            quadrature_weight * lam
-            - labels
-        )
-
-        hessian = (
-            statistical_weight
-            * quadrature_weight
-            * lam
-        )
-
-        return gradient, hessian
-
-    return weighted_poisson_objective
-
-
-# ============================================================
-# Logistic
-# ============================================================
-
-def make_logistic_objective(dummy_intensity):
-    """
-    Create the GBPP logistic custom objective.
-
-    pi_i =
-        exp(phi_i) / (exp(phi_i) + delta_i)
-
-    Gradient:
-        g_i = pi_i - y_i
-
-    Hessian:
-        h_i = pi_i * (1 - pi_i)
-    """
-
-    dummy_intensity = np.asarray(
-        dummy_intensity,
-        dtype=float
-    )
-
-    log_dummy_intensity = np.log(dummy_intensity)
-
-    def logistic_objective(preds, train_data):
-
-        phi = _clip_prediction(preds)
-        labels = _get_labels(train_data)
-
-        # pi = sigmoid(phi - log(delta))
-        pi = _safe_sigmoid(phi, log_dummy_intensity)
-
-        gradient = pi - labels
-
-        hessian = pi * (1.0 - pi)
-
-        return gradient, hessian
-
-    return logistic_objective
-
-
-# ============================================================
-# Weighted Logistic
-# ============================================================
-
-def make_weighted_logistic_objective(
-    dummy_intensity,
-    statistical_weight
-):
-    """
-    Create the GBPP weighted logistic custom objective.
-
-    Gradient:
-        g_i = w_i * (pi_i - y_i)
-
-    Hessian:
-        h_i = w_i * pi_i * (1 - pi_i)
-    """
-
-    dummy_intensity = np.asarray(
-        dummy_intensity,
-        dtype=float
-    )
-
-    statistical_weight = np.asarray(
-        statistical_weight,
-        dtype=float
-    )
-
-    log_dummy_intensity = np.log(dummy_intensity)
-
-    def weighted_logistic_objective(preds, train_data):
-
-        phi = _clip_prediction(preds)
-        labels = _get_labels(train_data)
-
-        pi = _safe_sigmoid(phi, log_dummy_intensity)
-
-        gradient = (
-            statistical_weight
-            * (pi - labels)
-        )
-
-        hessian = (
-            statistical_weight
-            * pi
-            * (1.0 - pi)
-        )
-
-        return gradient, hessian
-
-    return weighted_logistic_objective
-
-
-# ============================================================
-# Iterative Poisson
-# ============================================================
-
-def make_iterative_poisson_objective(
-    quadrature_weight,
-    interaction_integral
-):
-    """
-    Create the iterative GBPP Poisson custom objective.
-
-    Weight:
-        w_tilde_i = 1 / max(1e-4, 1 + lambda_i * A_i)
-        w_i = w_tilde_i / mean(w_tilde)
-
-    Gradient:
-        g_i = w_i * (v_i * lambda_i - y_i)
-
-    Hessian:
-        h_i = w_i * v_i * lambda_i
-
-    where:
-        lambda_i = exp(phi_i)
-        A_i      = interaction_integral_i
-    """
-
-    quadrature_weight = np.asarray(
-        quadrature_weight,
-        dtype=float
-    )
-
-    interaction_integral = np.asarray(
-        interaction_integral,
-        dtype=float
-    )
-
-    def iterative_poisson_objective(
-        preds,
-        train_data
-    ):
-
-        phi = _clip_prediction(preds)
-        labels = _get_labels(train_data)
-
-        lam = np.exp(phi)
-
-        denominator = np.maximum(
-            1e-4,
-            1.0 + lam * interaction_integral
-        )
-
-        weight = 1.0 / denominator
-        weight = weight / np.mean(weight)
-
-        gradient = weight * (
-            quadrature_weight * lam
-            - labels
-        )
-
-        hessian = (
-            weight
-            * quadrature_weight
-            * lam
-        )
-
-        return gradient, hessian
-
-    return iterative_poisson_objective
-
-
-# ============================================================
-# Iterative Logistic
-# ============================================================
-
-def make_iterative_logistic_objective(
-    dummy_intensity,
-    interaction_integral
-):
-    """
-    Create the iterative GBPP logistic custom objective.
-
-    Weight:
-        w_tilde_i =
-            (lambda_i + delta_i)
-            / [delta_i * max(1e-4, 1 + lambda_i * A_i)]
-        w_i = w_tilde_i / mean(w_tilde)
-
-    Gradient:
-        g_i = w_i * (pi_i - y_i)
-
-    Hessian:
-        h_i = w_i * pi_i * (1 - pi_i)
-
-    where:
-        lambda_i = exp(phi_i)
-        delta_i  = dummy intensity
-        A_i      = interaction integral
-    """
-
-    dummy_intensity = np.asarray(
-        dummy_intensity,
-        dtype=float
-    )
-
-    interaction_integral = np.asarray(
-        interaction_integral,
-        dtype=float
-    )
-
-    log_dummy_intensity = np.log(
-        dummy_intensity
-    )
-
-    def iterative_logistic_objective(
-        preds,
-        train_data
-    ):
-
-        phi = _clip_prediction(preds)
-        labels = _get_labels(train_data)
-
-        lam = np.exp(phi)
-
-        denominator = np.maximum(
-            1e-4,
-            1.0 + lam * interaction_integral
-        )
-
-        weight = (
-            (lam + dummy_intensity)
-            /
-            (
-                dummy_intensity
-                * denominator
-            )
-        )
-        weight = weight / np.mean(weight)
-
-        pi = _safe_sigmoid(phi, log_dummy_intensity)
-
-        gradient = weight * (
-            pi - labels
-        )
-
-        hessian = (
-            weight
-            * pi
-            * (1.0 - pi)
-        )
-
-        return gradient, hessian
-
-    return iterative_logistic_objective
+def make_objective(objective, v=None, delta=None, w=None, A=None):
+    """Create a custom point-process objective callable for LightGBM."""
+    if objective not in _ALL_OBJS:
+        raise ValueError(f"Unsupported objective: {objective}")
+
+    is_poisson = objective in _POISSON_OBJS
+    v_arr = np.asarray(v, dtype=float) if is_poisson else None
+    if not is_poisson:
+        delta_arr = np.asarray(delta, dtype=float)
+        log_delta = np.log(delta_arr)
+    else:
+        delta_arr = None
+        log_delta = None
+
+    w_arr = np.asarray(w, dtype=float) if objective in ("weighted_poisson", "weighted_logistic") else None
+    A_arr = np.asarray(A, dtype=float) if objective in ("iterative_poisson", "iterative_logistic") else None
+
+    def objective_fn(preds, train_data):
+        eta = _clip_eta(preds)
+        y = np.asarray(train_data.get_label(), dtype=float)
+
+        if is_poisson:
+            lam = np.exp(eta)
+            grad = v_arr * lam - y
+            hess = v_arr * lam
+            if objective == "weighted_poisson":
+                grad = w_arr * grad
+                hess = w_arr * hess
+            elif objective == "iterative_poisson":
+                wt = 1.0 / np.maximum(_MIN_DENOM, 1.0 + lam * A_arr)
+                wt = wt / np.mean(wt)
+                grad = wt * grad
+                hess = wt * hess
+        else:
+            pi = _safe_sigmoid(eta, log_delta)
+            grad = pi - y
+            hess = pi * (1.0 - pi)
+            if objective == "weighted_logistic":
+                grad = w_arr * grad
+                hess = w_arr * hess
+            elif objective == "iterative_logistic":
+                lam = np.exp(eta)
+                denom = delta_arr * np.maximum(_MIN_DENOM, 1.0 + lam * A_arr)
+                wt = (lam + delta_arr) / denom
+                wt = wt / np.mean(wt)
+                grad = wt * grad
+                hess = wt * hess
+
+        return grad, hess
+
+    return objective_fn

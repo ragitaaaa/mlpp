@@ -1,15 +1,12 @@
 # ============================================================
-# GBPP - Shared Feature Encoding, Baseline & Serialization Helpers
+# mlpp - Shared Feature Encoding, Baseline, Python & Model Helpers
 # ============================================================
 
 #' Extract Categorical Levels from Training Features
 #'
-#' @param X A `data.frame` or `matrix` of predictor covariates.
-#' @return A named list mapping factor/character column names to character
-#'   vectors of training levels, or `NULL` if no categorical columns exist.
 #' @keywords internal
 #' @noRd
-.gbpp_extract_factor_levels <- function(X) {
+.factor_levels <- function(X) {
   if (!is.data.frame(X) || ncol(X) == 0L) {
     return(NULL)
   }
@@ -32,22 +29,9 @@
 
 #' Align, Validate, and Encode Features Consistently Across Fit & Predict
 #'
-#' @param X Predictor `data.frame` or `matrix`.
-#' @param factor_levels Optional named list of saved training levels. When
-#'   `NULL`, levels are inferred from `X`.
-#' @param feature_names Optional character vector of expected feature names and
-#'   ordering from the fitted model.
-#' @param engine One of `"xgboost"`, `"lightgbm"`, or `"catboost"`.
-#' @param unseen How to handle unseen categorical levels when `factor_levels` is
-#'   provided: `"error"` (default across all engines) or `"na"` (maps unseen
-#'   levels to `NA` in factor encodings for `"xgboost"` and `"lightgbm"`, or
-#'   passes raw character strings to `"catboost"`).
-#'
-#' @return A formatted `data.frame` (or numeric `matrix` when input was a
-#'   `matrix` without categorical conversions needed) ready for the backend.
 #' @keywords internal
 #' @noRd
-.gbpp_encode_features <- function(
+.encode_X <- function(
   X,
   factor_levels = NULL,
   feature_names = NULL,
@@ -97,7 +81,6 @@
     return(X)
   }
 
-  # Data frame path
   out <- as.data.frame(X, check.names = FALSE)
   for (col in names(out)) {
     v <- out[[col]]
@@ -131,29 +114,36 @@
       } else {
         out[[col]] <- as.numeric(v)
       }
-    } else {
-      # CatBoost natively accepts strings/characters for categorical columns
-      if (is_cat || has_saved) {
-        out[[col]] <- as.character(v)
-      }
+    } else if (is_cat || has_saved) {
+      out[[col]] <- as.character(v)
     }
   }
 
   out
 }
 
-#' Normalize Baseline Input (NULL, Scalar, or Vector)
+#' Initialize and Validate Baseline Log-Intensity Offset
 #'
-#' @param baseline `NULL`, scalar numeric, or length-`n` numeric vector.
-#' @param n Expected observation count.
-#' @return A list with `vec` (length-`n` numeric vector or `NULL`), `attr_val`
-#'   (stored baseline attribute), and `has_nonzero` (logical).
+#' Computes the default baseline offset (`log(sum(y) / sum(quadrature_weight))`
+#' for Poisson objectives or `0.0` for logistic objectives) when `baseline` is
+#' `NULL`, and normalizes scalar or vector baselines across observations.
+#'
 #' @keywords internal
 #' @noRd
-.gbpp_normalize_baseline <- function(baseline, n) {
+.init_baseline <- function(data, objective, baseline = NULL) {
+  n <- nrow(data$X)
   if (is.null(baseline)) {
-    return(list(vec = NULL, attr_val = NULL, has_nonzero = FALSE))
+    if (objective %in% c("poisson", "weighted_poisson", "iterative_poisson")) {
+      lambda0 <- sum(data$y) / sum(data$quadrature_weight)
+      if (lambda0 <= 0 || !is.finite(lambda0)) {
+        stop("Initial Poisson intensity must be positive and finite.", call. = FALSE)
+      }
+      baseline <- log(lambda0)
+    } else {
+      baseline <- 0.0
+    }
   }
+
   if (!is.numeric(baseline) || any(!is.finite(baseline))) {
     stop("`baseline` must be a finite numeric scalar or vector.", call. = FALSE)
   }
@@ -164,6 +154,7 @@
       call. = FALSE
     )
   }
+
   b_num <- as.numeric(baseline)
   vec <- if (length(b_num) == 1L) rep(b_num, n) else b_num
   list(
@@ -173,53 +164,11 @@
   )
 }
 
-#' Initialize Baseline Log-Intensity Offset
+#' Attach Standard Metadata and Serialization Payload to a Fitted Model
 #'
-#' Computes the default baseline offset (`log(sum(y) / sum(quadrature_weight))`
-#' for Poisson objectives or `0.0` for logistic objectives) when `baseline` is
-#' `NULL`, then normalizes it across observations.
-#'
-#' @param data A validated `gbpp_data` object.
-#' @param objective Character string naming the point process objective.
-#' @param baseline Optional numeric scalar or observation-length vector.
-#' @return The normalized list returned by `.gbpp_normalize_baseline()`.
 #' @keywords internal
 #' @noRd
-.gbpp_init_baseline <- function(data, objective, baseline = NULL) {
-  if (is.null(baseline)) {
-    if (objective %in% c("poisson", "weighted_poisson", "iterative_poisson")) {
-      lambda0 <- sum(data$y) / sum(data$quadrature_weight)
-      if (lambda0 <= 0 || !is.finite(lambda0)) {
-        stop(
-          "Initial Poisson intensity must be positive and finite.",
-          call. = FALSE
-        )
-      }
-      baseline <- log(lambda0)
-    } else {
-      baseline <- 0.0
-    }
-  }
-  .gbpp_normalize_baseline(baseline, nrow(data$X))
-}
-
-#' Attach Standard Metadata and Serialization Payload to a Fitted GBPP Model
-#'
-#' @param raw_model Live fitted Python booster or regressor object.
-#' @param engine Boosting engine name (`"xgboost"`, `"lightgbm"`, `"catboost"`).
-#' @param objective Point process objective name.
-#' @param baseline_attr Normalized baseline metadata (`bl$attr_val`).
-#' @param feature_names Character vector of predictor column names, or `NULL`.
-#' @param factor_levels Named list of training categorical levels, or `NULL`.
-#' @param params Pure R list of resolved hyperparameters.
-#' @param n_trees Integer tree count.
-#' @param data Training `gbpp_data` object.
-#' @param extra_attrs Optional named list of additional engine-specific
-#'   attributes (e.g., `cat_features` for CatBoost).
-#' @return A classed `gbpp_model` object with attached attributes and payload.
-#' @keywords internal
-#' @noRd
-.gbpp_finalize_model <- function(
+.wrap_model <- function(
   raw_model,
   engine,
   objective,
@@ -231,7 +180,7 @@
   data,
   extra_attrs = list()
 ) {
-  ser <- .gbpp_serialize_model(raw_model, engine)
+  ser <- .pack_model(raw_model, engine)
 
   attr(raw_model, "engine") <- engine
   attr(raw_model, "objective") <- objective
@@ -252,52 +201,18 @@
     attr(raw_model, nm) <- extra_attrs[[nm]]
   }
 
-  class(raw_model) <- c(paste0("gbpp_", engine), "gbpp_model", class(raw_model))
+  class(raw_model) <- c(paste0("gbpp_", engine), "gbpp_model", "mlpp_model", class(raw_model))
   raw_model
-}
-
-#' Standardize TreeSHAP Matrix Output and Apply Model Baseline Offset
-#'
-#' @param shap_vals Numeric matrix of shape `n_rows x (p + 1)` from the backend.
-#' @param object Fitted `gbpp_model` object.
-#' @param n_rows Integer number of evaluated rows in `newdata`.
-#' @return A list with `shap` (`n_rows x p` matrix) and `bias` (numeric vector).
-#' @keywords internal
-#' @noRd
-.gbpp_finalize_shap <- function(shap_vals, object, n_rows) {
-  feat_names <- attr(object, "feature_names")
-  if (is.null(feat_names)) {
-    feat_names <- paste0("V", seq_len(ncol(shap_vals) - 1L))
-  }
-  colnames(shap_vals) <- c(feat_names, "bias")
-
-  baseline <- attr(object, "baseline")
-  bias <- as.numeric(shap_vals[, ncol(shap_vals)])
-  if (!is.null(baseline) &&
-    (length(baseline) == 1L || length(baseline) == n_rows)) {
-    bias <- bias + as.numeric(baseline)
-  }
-
-  list(
-    shap = shap_vals[, -ncol(shap_vals), drop = FALSE],
-    bias = bias
-  )
 }
 
 #' Validate That All Linear Network Covariates Share the Same `linnet`
 #'
-#' @param covariates List of `linim` or `linfun` objects.
-#' @param network Expected `spatstat.linnet::linnet` object.
-#' @param msg Error message thrown if any covariate uses a different network.
-#' @return Invisibly returns `TRUE` when all covariates match `network`.
 #' @keywords internal
 #' @noRd
-.gbpp_check_same_linnet <- function(covariates, network, msg) {
+.check_linnet <- function(covariates, network, msg) {
   same_network <- vapply(
     covariates,
-    function(z) {
-      identical(spatstat.linnet::as.linnet(z), network)
-    },
+    function(z) identical(spatstat.linnet::as.linnet(z), network),
     logical(1)
   )
   if (any(!same_network)) {
@@ -308,12 +223,9 @@
 
 #' Extract Raw Serialized Bytes / String from a Fitted Python Model
 #'
-#' @param raw_model Live Python model object.
-#' @param engine Engine name (`"xgboost"`, `"lightgbm"`, or `"catboost"`).
-#' @return A list with `payload` (raw vector or character string) and `format`.
 #' @keywords internal
 #' @noRd
-.gbpp_serialize_model <- function(raw_model, engine) {
+.pack_model <- function(raw_model, engine) {
   if (engine == "lightgbm") {
     return(list(
       payload = raw_model$model_to_string(),
@@ -332,16 +244,11 @@
   )
 }
 
-#' Rehydrate a Dead Reticulate External Pointer for a `gbpp_model`
+#' Rehydrate a Dead Reticulate External Pointer for an `mlpp_model`
 #'
-#' Automatically restores Python model state after `saveRDS()` / `readRDS()`
-#' using the native serialized payload stored in `attr(object, "serialized_model")`.
-#'
-#' @param object A `gbpp_model` object.
-#' @return A live `gbpp_model` object with an active Python external pointer.
 #' @keywords internal
 #' @noRd
-.gbpp_rehydrate_model <- function(object) {
+.unpack_model <- function(object) {
   if (!inherits(object, "python.builtin.object")) {
     return(object)
   }
@@ -355,14 +262,13 @@
 
   if (is.null(payload) || is.null(engine)) {
     stop(
-      "The `gbpp_model` Python object pointer is null and cannot be restored ",
-      "(missing serialized model payload). Re-fit or use ",
-      "`save_gbpp_model()`.",
+      "The `mlpp_model` Python object pointer is null and cannot be restored ",
+      "(missing serialized model payload). Re-fit or use `save_mlpp()`.",
       call. = FALSE
     )
   }
 
-  configure_gbpp_python()
+  .init_python()
 
   restored <- switch(engine,
     xgboost = {
@@ -379,7 +285,7 @@
       lgb$Booster(model_str = as.character(payload))
     },
     catboost = {
-      cb <- .gbpp_catboost()
+      cb <- reticulate::import("catboost", delay_load = FALSE)
       tmp <- tempfile(fileext = ".cbm")
       on.exit(unlink(tmp), add = TRUE)
       writeBin(payload, tmp)
@@ -401,26 +307,33 @@
   restored
 }
 
-#' Save a Fitted GBPP Model to Disk
+#' Save a Fitted mlpp Model to Disk
 #'
-#' Persists a fitted `gbpp_model` together with its native backend serialization
-#' payload and GBPP metadata (`baseline`, `feature_names`, `factor_levels`,
+#' Persists a fitted `mlpp_model` together with its native backend serialization
+#' payload and metadata (`baseline`, `feature_names`, `factor_levels`,
 #' `objective`, `n_trees`) to an `.rds` file so it can be restored reliably in
-#' any fresh R session via [load_gbpp_model()] or `readRDS()`.
+#' any fresh R session via [load_mlpp()] or `readRDS()`.
 #'
-#' @param object A fitted `gbpp_model` object.
+#' @param object A fitted `mlpp_model` object.
 #' @param file File path where the `.rds` model bundle will be written.
 #'
 #' @details
 #' Native Python booster pointers stored in external memory cannot survive R
-#' serialization on their own. `save_gbpp_model()` first serializes the live
-#' backend booster into raw bytes (XGBoost UBJ binary, LightGBM model string,
-#' or CatBoost `cbm` binary stream) and stores it alongside the GBPP attributes
-#' so [load_gbpp_model()] can reconstruct a live model in any future session.
+#' serialization on their own. While [fit_gbpp()] already embeds the native
+#' serialized payload (`"serialized_model"` attribute) so even plain `saveRDS()` /
+#' `readRDS()` restores automatically in [predict.mlpp_model()] and
+#' [explain_mlpp()], `save_mlpp()` verifies and refreshes the serialized raw
+#' payload (XGBoost UBJ binary, LightGBM model string, or CatBoost `cbm` binary
+#' stream) before saving the bundle so [load_mlpp()] can reconstruct a live
+#' model reliably in any future R session.
 #'
 #' @return Invisibly returns `file`.
 #'
-#' @seealso [load_gbpp_model()], [fit_gbpp()], [predict.gbpp_model()]
+#' @references
+#' Ushey, K., Allaire, J. J., & Tang, Y. (2024). *reticulate: Interface to Python*.
+#' R package.
+#'
+#' @seealso [load_mlpp()], [fit_gbpp()], [predict.mlpp_model()]
 #'
 #' @examples
 #' if (requireNamespace("spatstat.random", quietly = TRUE) &&
@@ -429,25 +342,25 @@
 #'   win <- spatstat.geom::square(1)
 #'   pts <- spatstat.random::runifpoint(20, win = win)
 #'   cov_x <- spatstat.geom::as.im(function(x, y) x, W = win)
-#'   dat <- prepare_gbpp(pts, covariates = list(x = cov_x), nd = 16L)
+#'   dat <- prepare_mlpp(pts, covariates = list(x = cov_x), nd = 16L)
 #'   fit <- fit_gbpp(dat, engine = "xgboost", objective = "poisson", n_trees = 10L)
 #'   tmp <- tempfile(fileext = ".rds")
-#'   save_gbpp_model(fit, tmp)
-#'   fit2 <- load_gbpp_model(tmp)
+#'   save_mlpp(fit, tmp)
+#'   fit2 <- load_mlpp(tmp)
 #'   unlink(tmp)
 #' }
 #' @export
-save_gbpp_model <- function(object, file) {
-  if (!inherits(object, "gbpp_model")) {
-    stop("`object` must be a `gbpp_model` object.", call. = FALSE)
+save_mlpp <- function(object, file) {
+  if (!inherits(object, "mlpp_model")) {
+    stop("`object` must be an `mlpp_model` object.", call. = FALSE)
   }
   if (!is.character(file) || length(file) != 1L || !nzchar(file)) {
     stop("`file` must be a non-empty file path string.", call. = FALSE)
   }
 
-  live_obj <- .gbpp_rehydrate_model(object)
+  live_obj <- .unpack_model(object)
   if (is.null(attr(live_obj, "serialized_model"))) {
-    ser <- .gbpp_serialize_model(live_obj, attr(live_obj, "engine"))
+    ser <- .pack_model(live_obj, attr(live_obj, "engine"))
     attr(live_obj, "serialized_model") <- ser$payload
     attr(live_obj, "serialized_format") <- ser$format
   }
@@ -456,22 +369,26 @@ save_gbpp_model <- function(object, file) {
   invisible(file)
 }
 
-#' Load a Saved GBPP Model from Disk
+#' Load a Saved mlpp Model from Disk
 #'
-#' Loads a `gbpp_model` saved with [save_gbpp_model()] or `saveRDS()` and
-#' immediately rehydrates its Python backend object in the active session.
+#' Loads an `mlpp_model` saved with [save_mlpp()] or `saveRDS()` and immediately
+#' rehydrates its Python backend object in the active session.
 #'
 #' @param file Path to a saved `.rds` model file.
 #'
 #' @details
-#' Reads the `.rds` model bundle created by [save_gbpp_model()], ensures the
-#' Python runtime is initialized, and rehydrates the underlying Python booster
-#' from its embedded serialized payload.
+#' Reads the `.rds` model bundle created by [save_mlpp()], ensures the Python
+#' runtime is initialized, and rehydrates the underlying Python booster from its
+#' embedded serialized payload.
 #'
-#' @return A live `gbpp_model` object ready for [predict.gbpp_model()],
-#'   [explain_gbpp()], and [plot.gbpp_model()].
+#' @return A live `mlpp_model` object ready for [predict.mlpp_model()],
+#'   [explain_mlpp()], and [plot.mlpp_model()].
 #'
-#' @seealso [save_gbpp_model()], [fit_gbpp()], [predict.gbpp_model()]
+#' @references
+#' Ushey, K., Allaire, J. J., & Tang, Y. (2024). *reticulate: Interface to Python*.
+#' R package.
+#'
+#' @seealso [save_mlpp()], [fit_gbpp()], [predict.mlpp_model()]
 #'
 #' @examples
 #' if (requireNamespace("spatstat.random", quietly = TRUE) &&
@@ -480,38 +397,53 @@ save_gbpp_model <- function(object, file) {
 #'   win <- spatstat.geom::square(1)
 #'   pts <- spatstat.random::runifpoint(20, win = win)
 #'   cov_x <- spatstat.geom::as.im(function(x, y) x, W = win)
-#'   dat <- prepare_gbpp(pts, covariates = list(x = cov_x), nd = 16L)
+#'   dat <- prepare_mlpp(pts, covariates = list(x = cov_x), nd = 16L)
 #'   fit <- fit_gbpp(dat, engine = "xgboost", objective = "poisson", n_trees = 10L)
 #'   tmp <- tempfile(fileext = ".rds")
-#'   save_gbpp_model(fit, tmp)
-#'   fit2 <- load_gbpp_model(tmp)
+#'   save_mlpp(fit, tmp)
+#'   fit2 <- load_mlpp(tmp)
 #'   print(fit2)
 #'   unlink(tmp)
 #' }
 #' @export
-load_gbpp_model <- function(file) {
+load_mlpp <- function(file) {
   if (!is.character(file) || length(file) != 1L || !file.exists(file)) {
     stop("Model file does not exist: ", file, call. = FALSE)
   }
   obj <- readRDS(file)
-  .gbpp_rehydrate_model(obj)
+  .unpack_model(obj)
 }
 
-#' Construct a Python Objective Function or Object for a GBPP Engine
+#' Import and Cache the Bundled Python Objective Module for an Engine
 #'
-#' @param engine Boosting backend: `"xgboost"`, `"lightgbm"`, or `"catboost"`.
-#' @param objective Point process objective name.
-#' @param quadrature_weight Numeric vector of Berman-Turner quadrature weights.
-#' @param dummy_intensity Numeric vector of dummy-process intensities.
-#' @param statistical_weight Optional numeric vector of statistical weights.
-#' @param interaction_integral Optional numeric scalar or vector of interaction
-#'   integrals.
-#' @param stateless Logical; for `"catboost"`, return stateless objectives for
-#'   non-iterative losses when `TRUE`.
-#' @return A Python callable objective or CatBoost objective instance.
 #' @keywords internal
 #' @noRd
-.gbpp_make_objective <- function(
+.py_mod <- local({
+  cache <- list()
+
+  function(engine = c("xgboost", "lightgbm", "catboost")) {
+    engine <- match.arg(engine)
+    if (!is.null(cache[[engine]])) {
+      return(cache[[engine]])
+    }
+
+    .init_python()
+    mod_name <- paste0("gbpp_", engine)
+    mod <- reticulate::import_from_path(
+      module = mod_name,
+      path = .py_path(),
+      delay_load = FALSE
+    )
+    cache[[engine]] <<- mod
+    mod
+  }
+})
+
+#' Construct a Python Objective Function or Object for a GBDT Engine
+#'
+#' @keywords internal
+#' @noRd
+.make_obj <- function(
   engine = c("xgboost", "lightgbm", "catboost"),
   objective = c(
     "poisson",
@@ -521,71 +453,18 @@ load_gbpp_model <- function(file) {
     "iterative_poisson",
     "iterative_logistic"
   ),
-  quadrature_weight = NULL,
-  dummy_intensity = NULL,
-  statistical_weight = NULL,
-  interaction_integral = NULL,
-  stateless = TRUE
+  v = NULL,
+  delta = NULL,
+  w = NULL,
+  A = NULL
 ) {
   engine <- match.arg(engine)
   objective <- match.arg(objective)
-
-  if (engine == "catboost") {
-    mod <- .gbpp_catboost_module()
-    if (isTRUE(stateless) &&
-      !(objective %in% c("iterative_poisson", "iterative_logistic"))) {
-      return(switch(objective,
-        poisson = mod$StatelessPoissonObjective(),
-        weighted_poisson = mod$StatelessPoissonObjective(),
-        logistic = mod$StatelessLogisticObjective(),
-        weighted_logistic = mod$StatelessLogisticObjective()
-      ))
-    }
-    return(switch(objective,
-      poisson = mod$PoissonObjective(quadrature_weight = quadrature_weight),
-      weighted_poisson = mod$WeightedPoissonObjective(
-        quadrature_weight = quadrature_weight,
-        statistical_weight = statistical_weight
-      ),
-      logistic = mod$LogisticObjective(dummy_intensity = dummy_intensity),
-      weighted_logistic = mod$WeightedLogisticObjective(
-        dummy_intensity = dummy_intensity,
-        statistical_weight = statistical_weight
-      ),
-      iterative_poisson = mod$IterativePoissonObjective(
-        quadrature_weight = quadrature_weight,
-        interaction_integral = interaction_integral
-      ),
-      iterative_logistic = mod$IterativeLogisticObjective(
-        dummy_intensity = dummy_intensity,
-        interaction_integral = interaction_integral
-      )
-    ))
-  }
-
-  mod <- if (engine == "lightgbm") {
-    .gbpp_lightgbm_module()
-  } else {
-    .gbpp_xgboost_module()
-  }
-  switch(objective,
-    poisson = mod$make_poisson_objective(quadrature_weight = quadrature_weight),
-    weighted_poisson = mod$make_weighted_poisson_objective(
-      quadrature_weight = quadrature_weight,
-      statistical_weight = statistical_weight
-    ),
-    logistic = mod$make_logistic_objective(dummy_intensity = dummy_intensity),
-    weighted_logistic = mod$make_weighted_logistic_objective(
-      dummy_intensity = dummy_intensity,
-      statistical_weight = statistical_weight
-    ),
-    iterative_poisson = mod$make_iterative_poisson_objective(
-      quadrature_weight = quadrature_weight,
-      interaction_integral = interaction_integral
-    ),
-    iterative_logistic = mod$make_iterative_logistic_objective(
-      dummy_intensity = dummy_intensity,
-      interaction_integral = interaction_integral
-    )
+  .py_mod(engine)$make_objective(
+    objective = objective,
+    v = v,
+    delta = delta,
+    w = w,
+    A = A
   )
 }
