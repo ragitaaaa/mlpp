@@ -1,6 +1,6 @@
-# Helper fixtures for gbpp testthat suite
+# Helper fixtures for mlpp testthat suite
 
-make_small_gbpp_data <- function(n = 8L) {
+make_small_mlpp_data <- function(n = 8L) {
   set.seed(42)
   X <- matrix(
     c(
@@ -18,7 +18,7 @@ make_small_gbpp_data <- function(n = 8L) {
   )
   colnames(X) <- c("feat1", "feat2")
 
-  new_gbpp_data(
+  mlpp_data(
     X = X,
     y = c(1, 0, 1, 0, 1, 0, 0, 1),
     locations = X,
@@ -76,7 +76,7 @@ make_network_integration_fixture <- function(n = 8L) {
 
 skip_if_no_python <- function(modules = character()) {
   testthat::skip_on_cran()
-  tryCatch(mlpp::configure_gbpp_python(), error = function(e) NULL)
+  tryCatch(mlpp:::.init_python(), error = function(e) NULL)
   testthat::skip_if_not(
     reticulate::py_available(initialize = TRUE),
     "Python is not available."
