@@ -6,7 +6,7 @@
 
 `mlpp` is an R package for fitting machine learning models—currently featuring gradient boosted decision trees (`fit_gbpp()`)—to spatial point process data. It integrates spatial point process methodology with gradient boosting backends (**LightGBM**, **CatBoost**, and **XGBoost**) via `reticulate`.
 
-The package supports both two-dimensional planar Euclidean windows ($W \subset \mathbb{R}^2$) and one-dimensional linear networks ($\mathcal{L} \subset \mathbb{R}^2$, such as street or river networks), alongside stochastic thinning spatial cross-validation, TreeSHAP model explanations, and session-safe model serialization.
+The package supports both planar Euclidean windows ($W \subset \mathbb{R}^2$) and linear networks ($\mathcal{L} \subset \mathbb{R}^2$, such as street or river networks), alongside stochastic thinning spatial cross-validation, TreeSHAP model explanations, and session-safe model serialization.
 
 ---
 
@@ -18,8 +18,8 @@ The package supports both two-dimensional planar Euclidean windows ($W \subset \
   - [Step 2: Automated Python Environment Configuration](#step-2-automated-python-environment-configuration)
   - [Step 3: Verification & Diagnostics](#step-3-verification--diagnostics)
 - [Step-by-Step Usage Guide](#step-by-step-usage-guide)
-  - [Workflow 1: 2D Planar Point Processes](#workflow-1-2d-planar-point-processes)
-  - [Workflow 2: 1D Linear Road Networks](#workflow-2-1d-linear-road-networks)
+  - [Workflow 1: Planar Point Processes](#workflow-1-planar-point-processes)
+  - [Workflow 2: Linear Road Networks](#workflow-2-linear-road-networks)
   - [Workflow 3: Spatial Cross-Validation via Stochastic Thinning](#workflow-3-spatial-cross-validation-via-stochastic-thinning)
   - [Workflow 4: Model Interpretability (TreeSHAP & Partial Dependence)](#workflow-4-model-interpretability-treeshap--partial-dependence)
 - [API Reference Summary](#api-reference-summary)
@@ -94,7 +94,7 @@ check_mlpp_python()
 
 ## Step-by-Step Usage Guide
 
-### Workflow 1: 2D Planar Point Processes
+### Workflow 1: Planar Point Processes
 
 This example models the spatial distribution of *Beilschmiedia pendula* trees from the `bei` dataset on Barro Colorado Island using elevation and slope gradient covariates.
 
@@ -159,7 +159,7 @@ c(
 
 ---
 
-### Workflow 2: 1D Linear Road Networks
+### Workflow 2: Linear Road Networks
 
 `mlpp` supports network-constrained point processes via `spatstat.linnet`.
 

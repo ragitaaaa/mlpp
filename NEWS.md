@@ -6,7 +6,7 @@
   **LightGBM**, and **CatBoost** via `reticulate`, including TreeSHAP
   explainability (`explain_mlpp()`).
 * Unified spatial quadrature preparation and data container (`prepare_mlpp()`,
-  `mlpp_data()`) supporting 2D planar point patterns (`ppp`), 1D linear network
+  `mlpp_data()`) supporting planar point patterns (`ppp`), linear network
   point patterns (`lpp`), and pre-built `spatstat` quadrature schemes (`quad`).
 * Six point process objectives: `"poisson"`, `"weighted_poisson"`,
   `"logistic"`, `"weighted_logistic"`, `"iterative_poisson"`, and

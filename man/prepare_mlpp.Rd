@@ -67,8 +67,8 @@ A validated \code{mlpp_data} object with \code{type} equal to \code{"planar"} or
 \code{"network"}.
 }
 \description{
-Unified data preparation entry point supporting 2D planar point patterns
-(\code{ppp}), 1D linear network point patterns (\code{lpp}), and pre-built \code{spatstat}
+Unified data preparation entry point supporting planar point patterns
+(\code{ppp}), linear network point patterns (\code{lpp}), and pre-built \code{spatstat}
 quadrature schemes (\code{quad}). Evaluates spatial covariates at quadrature
 locations and constructs Berman-Turner weights \eqn{v_i} and dummy-process
 intensities \eqn{\delta_i}.

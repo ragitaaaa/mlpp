@@ -1,7 +1,7 @@
 #' Prepare an mlpp spatial point-process data object
 #'
-#' Unified data preparation entry point supporting 2D planar point patterns
-#' (`ppp`), 1D linear network point patterns (`lpp`), and pre-built `spatstat`
+#' Unified data preparation entry point supporting planar point patterns
+#' (`ppp`), linear network point patterns (`lpp`), and pre-built `spatstat`
 #' quadrature schemes (`quad`). Evaluates spatial covariates at quadrature
 #' locations and constructs Berman-Turner weights \eqn{v_i} and dummy-process
 #' intensities \eqn{\delta_i}.
